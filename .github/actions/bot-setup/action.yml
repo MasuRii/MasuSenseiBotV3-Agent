@@ -47,6 +47,12 @@ runs:
 
     - name: Generate OpenCode Configuration
       shell: bash
+      env:
+        # Pass inputs as environment variables to avoid shell parsing issues
+        INPUT_MAIN_MODEL: ${{ inputs.opencode-model }}
+        INPUT_FAST_MODEL: ${{ inputs.opencode-fast-model }}
+        INPUT_DEFAULT_API_KEY: ${{ inputs.opencode-api-key }}
+        INPUT_CUSTOM_PROVIDERS: ${{ inputs.custom-providers-json }}
       run: |
         set -e # Exit immediately if a command fails
 
@@ -57,20 +63,14 @@ runs:
 
         mkdir -p ~/.config/opencode
 
-        # --- INPUTS ---
-        MAIN_MODEL="${{ inputs.opencode-model }}"
-        FAST_MODEL="${{ inputs.opencode-fast-model }}"
-        DEFAULT_API_KEY="${{ inputs.opencode-api-key }}"
-
-        # Use command substitution with a heredoc to safely read the input into a variable.
-        # This is robust against complex characters and avoids creating a giant line of code that can break shell parsers.
-        CUSTOM_PROVIDERS=$(cat <<'EOF'
-        ${{ inputs.custom-providers-json }}
-        EOF
-        )
+        # --- INPUTS (from environment variables, safely passed by GitHub Actions) ---
+        MAIN_MODEL="${INPUT_MAIN_MODEL}"
+        FAST_MODEL="${INPUT_FAST_MODEL}"
+        DEFAULT_API_KEY="${INPUT_DEFAULT_API_KEY}"
+        CUSTOM_PROVIDERS="${INPUT_CUSTOM_PROVIDERS}"
 
         # If the input was empty (or just whitespace), the variable will be empty. Set a default.
-        if [ -z "$CUSTOM_PROVIDERS" ]; then
+        if [ -z "$CUSTOM_PROVIDERS" ] || [ "$CUSTOM_PROVIDERS" = "" ]; then
           CUSTOM_PROVIDERS='{}'
         fi
 
