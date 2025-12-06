@@ -41,8 +41,8 @@ runs:
       env:
         GH_TOKEN: ${{ steps.generate_token.outputs.token }}
       run: |
-        git config --global user.name "mirrobot-agent[bot]"
-        git config --global user.email "${{ inputs.bot-app-id }}+mirrobot-agent@users.noreply.github.com"
+        git config --global user.name "masusenseibot-agent[bot]"
+        git config --global user.email "${{ inputs.bot-app-id }}+masusenseibot-agent@users.noreply.github.com"
         git config --global url."https://x-access-token:${{ steps.generate_token.outputs.token }}@github.com/".insteadOf "https://github.com/"
 
     - name: Generate OpenCode Configuration
@@ -76,7 +76,7 @@ runs:
 
         # --- INITIAL CONFIG SETUP ---
         mkdir -p ~/.config/opencode
-        CONFIG='{"$schema": "https://opencode.ai/config.json", "username": "mirrobot-agent", "autoupdate": true}'
+        CONFIG='{"$schema": "https://opencode.ai/config.json", "username": "masusenseibot-agent", "autoupdate": true}'
 
         # Merge custom provider definitions if they are not the empty default
         if [ "$CUSTOM_PROVIDERS" != "{}" ]; then

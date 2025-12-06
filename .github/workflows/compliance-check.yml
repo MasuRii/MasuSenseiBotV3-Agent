@@ -9,7 +9,7 @@
 #   - AUTOMATICALLY after PR Review completes (for events that trigger both)
 #   - PR labeled with 'ready-for-merge'
 #   - PR marked ready for review
-#   - Comment with '/mirrobot-check' or '/mirrobot_check'
+#   - Comment with '/masusenseibot-check' or '/masusenseibot_check'
 #   - Manual workflow dispatch
 #
 # Workflow Dependency:
@@ -62,17 +62,17 @@ jobs:
     # Run when:
     # 1. Manual trigger via workflow_dispatch
     # 2. PR marked ready for review or labeled 'ready-for-merge'
-    # 3. Comment contains '/mirrobot-check' or '/mirrobot_check'
+    # 3. Comment contains '/masusenseibot-check' or '/masusenseibot_check'
     # Note: ready_for_review will wait for PR Review to complete (see step below)
     if: |
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request_target' && 
        (github.event.action == 'ready_for_review' ||
         (github.event.action == 'labeled' && contains(github.event.label.name, 'ready-for-merge')))) ||
-      (github.event_name == 'issue_comment' && 
-       github.event.issue.pull_request && 
-       (contains(github.event.comment.body, '/mirrobot-check') || 
-        contains(github.event.comment.body, '/mirrobot_check')))
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       (contains(github.event.comment.body, '/masusenseibot-check') ||
+        contains(github.event.comment.body, '/masusenseibot_check')))
     runs-on: ubuntu-latest
     
     # Minimal permissions following principle of least privilege
@@ -87,7 +87,7 @@ jobs:
       # BASIC CONFIGURATION
       # -----------------------------------------------------------------------
       PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || github.event.workflow_run.pull_requests[0].number }}
-      BOT_NAMES_JSON: '["mirrobot", "mirrobot-agent", "mirrobot-agent[bot]"]'
+      BOT_NAMES_JSON: '["masusenseibot", "masusenseibot-agent", "masusenseibot-agent[bot]"]'
       
       # -----------------------------------------------------------------------
       # FEATURE TOGGLES
@@ -317,7 +317,7 @@ jobs:
       - name: Generate PR Diff
         id: diff
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/.mirrobot_files"
+          mkdir -p "$GITHUB_WORKSPACE/.masusenseibot_files"
           
           # Get base branch from PR
           pr_json=$(gh pr view ${{ env.PR_NUMBER }} --repo ${{ github.repository }} --json baseRefName)
@@ -347,22 +347,22 @@ jobs:
                   DIFF_CONTENT="${DIFF_CONTENT:0:500000}${TRUNCATION_MSG}"
                 fi
                 
-                echo "$DIFF_CONTENT" > "$GITHUB_WORKSPACE/.mirrobot_files/pr_diff.txt"
-                echo "diff_path=$GITHUB_WORKSPACE/.mirrobot_files/pr_diff.txt" >> $GITHUB_OUTPUT
+                echo "$DIFF_CONTENT" > "$GITHUB_WORKSPACE/.masusenseibot_files/pr_diff.txt"
+                echo "diff_path=$GITHUB_WORKSPACE/.masusenseibot_files/pr_diff.txt" >> $GITHUB_OUTPUT
               else
                 echo "::warning::Could not generate diff. Using changed files list only."
-                echo "(Diff generation failed. Please refer to the changed files list.)" > "$GITHUB_WORKSPACE/.mirrobot_files/pr_diff.txt"
-                echo "diff_path=$GITHUB_WORKSPACE/.mirrobot_files/pr_diff.txt" >> $GITHUB_OUTPUT
+                echo "(Diff generation failed. Please refer to the changed files list.)" > "$GITHUB_WORKSPACE/.masusenseibot_files/pr_diff.txt"
+                echo "diff_path=$GITHUB_WORKSPACE/.masusenseibot_files/pr_diff.txt" >> $GITHUB_OUTPUT
               fi
             else
               echo "::warning::Could not find merge base."
-              echo "(No common ancestor found.)" > "$GITHUB_WORKSPACE/.mirrobot_files/pr_diff.txt"
-              echo "diff_path=$GITHUB_WORKSPACE/.mirrobot_files/pr_diff.txt" >> $GITHUB_OUTPUT
+              echo "(No common ancestor found.)" > "$GITHUB_WORKSPACE/.masusenseibot_files/pr_diff.txt"
+              echo "diff_path=$GITHUB_WORKSPACE/.masusenseibot_files/pr_diff.txt" >> $GITHUB_OUTPUT
             fi
           else
             echo "::warning::Could not fetch base branch."
-            echo "(Base branch not available for diff.)" > "$GITHUB_WORKSPACE/.mirrobot_files/pr_diff.txt"
-            echo "diff_path=$GITHUB_WORKSPACE/.mirrobot_files/pr_diff.txt" >> $GITHUB_OUTPUT
+            echo "(Base branch not available for diff.)" > "$GITHUB_WORKSPACE/.masusenseibot_files/pr_diff.txt"
+            echo "diff_path=$GITHUB_WORKSPACE/.masusenseibot_files/pr_diff.txt" >> $GITHUB_OUTPUT
           fi
         env:
           GH_TOKEN: ${{ steps.setup.outputs.token }}
@@ -423,7 +423,7 @@ jobs:
           [AI to complete: Actionable guidance]
 
           ---
-          _Compliance verification by AI agent • Re-run with `/mirrobot-check`_
+          _Compliance verification by Masu Sensei • Re-run with `/masusenseibot-check`_
           <!-- compliance-check-id: ${{ env.PR_NUMBER }}-${{ steps.pr_info.outputs.head_sha }} -->
           TEMPLATE
 
