@@ -69,9 +69,26 @@ runs:
         DEFAULT_API_KEY="${INPUT_DEFAULT_API_KEY}"
         CUSTOM_PROVIDERS="${INPUT_CUSTOM_PROVIDERS}"
 
+        # --- DEBUG: Show input lengths to diagnose secret misconfiguration ---
+        echo "DEBUG: MAIN_MODEL length: ${#MAIN_MODEL} chars"
+        echo "DEBUG: MAIN_MODEL first 30 chars: ${MAIN_MODEL:0:30}..."
+        echo "DEBUG: CUSTOM_PROVIDERS length: ${#CUSTOM_PROVIDERS} chars"
+        echo "DEBUG: CUSTOM_PROVIDERS is set: $( [ -n "$CUSTOM_PROVIDERS" ] && echo 'yes' || echo 'no' )"
+        
+        # Validate MAIN_MODEL format (should be provider/model, not JSON)
+        if [[ "$MAIN_MODEL" == "{"* ]] || [[ "$MAIN_MODEL" == '"{'* ]]; then
+          echo "::error::OPENCODE_MODEL secret appears to contain JSON instead of a model string like 'antigravity/claude-sonnet-4-5'. Please check your repository secrets."
+          echo "::error::Expected format: provider/model (e.g., 'openai/gpt-4o' or 'antigravity/claude-sonnet-4-5')"
+          echo "::error::The JSON content should be in CUSTOM_PROVIDERS_JSON secret, not OPENCODE_MODEL."
+          exit 1
+        fi
+
         # If the input was empty (or just whitespace), the variable will be empty. Set a default.
         if [ -z "$CUSTOM_PROVIDERS" ] || [ "$CUSTOM_PROVIDERS" = "" ]; then
           CUSTOM_PROVIDERS='{}'
+          echo "DEBUG: CUSTOM_PROVIDERS was empty, using default: {}"
+        else
+          echo "DEBUG: CUSTOM_PROVIDERS has content"
         fi
 
         # --- INITIAL CONFIG SETUP ---
