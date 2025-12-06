@@ -1230,11 +1230,23 @@ We welcome contributions! Here's how:
 
 ---
 
-## Credits
+## Credits & Attribution
+
+### 🙏 Original Inspiration
+
+**MasuSenseiBot-Agent is based on [Mirrobot-agent](https://github.com/Mirrowel/Mirrobot-agent)**
+
+This project was forked and adapted from the original Mirrobot implementation. We owe significant gratitude to the Mirrobot project for providing the foundational architecture, workflow patterns, and prompt engineering that made this bot possible.
+
+**Key adaptations from Mirrobot:**
+- Customized persona (Masu Sensei mentorship theme)
+- Adjusted personality and communication style
+- Minor configuration and workflow refinements
 
 ### Built On
 
-- **[OpenCode](https://opencode.ai)**: The AI engine powering MasuSenseiBot-Agent
+- **[Mirrobot-agent](https://github.com/Mirrowel/Mirrobot-agent)**: The original bot implementation this project is based on
+- **[OpenCode](https://opencode.ai)**: The AI engine powering the bot's intelligence
 - **[GitHub Actions](https://github.com/features/actions)**: Execution platform
 - **[GitHub Apps](https://docs.github.com/en/apps)**: Authentication and API access
 
@@ -1248,7 +1260,8 @@ We welcome contributions! Here's how:
 
 ### Acknowledgments
 
-- OpenCode team for the excellent AI agent platform
+- **[Mirrobot](https://github.com/Mirrowel/Mirrobot-agent)** for the original implementation that served as the foundation for this project
+- **[OpenCode.ai](https://opencode.ai)** team for the excellent AI agent platform and framework
 - GitHub for free Actions minutes on open-source projects
 - The open-source community for inspiration and feedback
 
