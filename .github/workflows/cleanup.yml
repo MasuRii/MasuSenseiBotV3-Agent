@@ -1,0 +1,236 @@
+name: 🧹 Cleanup Bot Comments
+
+on:
+  schedule:
+    # Run weekly on Sunday at 00:00 UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run mode (preview without deleting)'
+        required: false
+        type: boolean
+        default: true
+      max_age_days:
+        description: 'Delete comments older than this many days (on closed items only)'
+        required: false
+        type: number
+        default: 30
+      target_type:
+        description: 'What to clean up'
+        required: false
+        type: choice
+        options:
+          - 'all'
+          - 'issues'
+          - 'pull_requests'
+        default: 'all'
+      cleanup_acknowledgments:
+        description: 'Also clean up "Starting review..." acknowledgment comments'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+env:
+  # Bot identity names for comment detection
+  BOT_NAMES: "masusenseibot,masusenseibot-agent,masusenseibot-agent[bot]"
+  # Comment patterns that indicate temporary/acknowledgment comments
+  ACK_PATTERNS: "Starting my review|I'm starting|Diving into|Starting the investigation"
+  # Maximum items to process per run (to avoid rate limits)
+  MAX_ITEMS_PER_RUN: 100
+
+jobs:
+  cleanup-comments:
+    name: 🧹 Clean Up Stale Bot Comments
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set configuration
+        id: config
+        run: |
+          # Set defaults for scheduled runs
+          DRY_RUN="${{ github.event.inputs.dry_run || 'true' }}"
+          MAX_AGE="${{ github.event.inputs.max_age_days || '30' }}"
+          TARGET="${{ github.event.inputs.target_type || 'all' }}"
+          CLEANUP_ACKS="${{ github.event.inputs.cleanup_acknowledgments || 'true' }}"
+          
+          echo "dry_run=$DRY_RUN" >> $GITHUB_OUTPUT
+          echo "max_age_days=$MAX_AGE" >> $GITHUB_OUTPUT
+          echo "target_type=$TARGET" >> $GITHUB_OUTPUT
+          echo "cleanup_acks=$CLEANUP_ACKS" >> $GITHUB_OUTPUT
+          
+          # Calculate cutoff date
+          CUTOFF_DATE=$(date -d "$MAX_AGE days ago" +%Y-%m-%dT%H:%M:%SZ)
+          echo "cutoff_date=$CUTOFF_DATE" >> $GITHUB_OUTPUT
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🧹 Masu Sensei Cleanup Configuration"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  • Dry Run: $DRY_RUN"
+          echo "  • Max Age: $MAX_AGE days"
+          echo "  • Target: $TARGET"
+          echo "  • Cleanup Acknowledgments: $CLEANUP_ACKS"
+          echo "  • Cutoff Date: $CUTOFF_DATE"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: Find and process closed issues
+        if: steps.config.outputs.target_type == 'all' || steps.config.outputs.target_type == 'issues'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ steps.config.outputs.dry_run }}
+          CUTOFF_DATE: ${{ steps.config.outputs.cutoff_date }}
+          CLEANUP_ACKS: ${{ steps.config.outputs.cleanup_acks }}
+        run: |
+          echo "🔍 Searching for closed issues with bot comments..."
+          
+          DELETED_COUNT=0
+          SKIPPED_COUNT=0
+          
+          # Get closed issues from the last 90 days that might have bot comments
+          ISSUES=$(gh issue list --repo "${{ github.repository }}" --state closed --limit $MAX_ITEMS_PER_RUN --json number,closedAt,title)
+          
+          echo "$ISSUES" | jq -c '.[]' | while read -r issue; do
+            ISSUE_NUMBER=$(echo "$issue" | jq -r '.number')
+            ISSUE_TITLE=$(echo "$issue" | jq -r '.title')
+            
+            echo "  Processing Issue #$ISSUE_NUMBER: $ISSUE_TITLE"
+            
+            # Get comments on this issue
+            COMMENTS=$(gh api "/repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments" --jq '.[]')
+            
+            echo "$COMMENTS" | jq -c '.' | while read -r comment; do
+              COMMENT_ID=$(echo "$comment" | jq -r '.id')
+              COMMENT_USER=$(echo "$comment" | jq -r '.user.login')
+              COMMENT_DATE=$(echo "$comment" | jq -r '.created_at')
+              COMMENT_BODY=$(echo "$comment" | jq -r '.body')
+              
+              # Check if comment is from the bot
+              if echo "$BOT_NAMES" | grep -qi "$COMMENT_USER"; then
+                # Check if comment is older than cutoff
+                if [[ "$COMMENT_DATE" < "$CUTOFF_DATE" ]]; then
+                  # Check if it's an acknowledgment comment (if cleanup_acks is enabled)
+                  IS_ACK="false"
+                  if [[ "$CLEANUP_ACKS" == "true" ]]; then
+                    if echo "$COMMENT_BODY" | grep -qiE "$ACK_PATTERNS"; then
+                      IS_ACK="true"
+                    fi
+                  fi
+                  
+                  if [[ "$IS_ACK" == "true" ]] || [[ "$CLEANUP_ACKS" == "false" ]]; then
+                    if [[ "$DRY_RUN" == "true" ]]; then
+                      echo "    [DRY RUN] Would delete comment $COMMENT_ID (from $COMMENT_DATE)"
+                    else
+                      echo "    Deleting comment $COMMENT_ID..."
+                      gh api --method DELETE "/repos/${{ github.repository }}/issues/comments/$COMMENT_ID" || echo "      ⚠️ Failed to delete"
+                      DELETED_COUNT=$((DELETED_COUNT + 1))
+                    fi
+                  else
+                    echo "    Skipping comment $COMMENT_ID (not an acknowledgment)"
+                    SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+                  fi
+                fi
+              fi
+            done
+          done
+          
+          echo "issue_deleted=$DELETED_COUNT" >> $GITHUB_OUTPUT
+          echo "issue_skipped=$SKIPPED_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Find and process closed pull requests
+        if: steps.config.outputs.target_type == 'all' || steps.config.outputs.target_type == 'pull_requests'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ steps.config.outputs.dry_run }}
+          CUTOFF_DATE: ${{ steps.config.outputs.cutoff_date }}
+          CLEANUP_ACKS: ${{ steps.config.outputs.cleanup_acks }}
+        run: |
+          echo "🔍 Searching for closed PRs with bot comments..."
+          
+          DELETED_COUNT=0
+          SKIPPED_COUNT=0
+          
+          # Get closed/merged PRs from the last 90 days
+          PRS=$(gh pr list --repo "${{ github.repository }}" --state closed --limit $MAX_ITEMS_PER_RUN --json number,closedAt,title,mergedAt)
+          
+          echo "$PRS" | jq -c '.[]' | while read -r pr; do
+            PR_NUMBER=$(echo "$pr" | jq -r '.number')
+            PR_TITLE=$(echo "$pr" | jq -r '.title')
+            
+            echo "  Processing PR #$PR_NUMBER: $PR_TITLE"
+            
+            # Get comments on this PR (issue comments, not review comments)
+            COMMENTS=$(gh api "/repos/${{ github.repository }}/issues/$PR_NUMBER/comments" --jq '.[]')
+            
+            echo "$COMMENTS" | jq -c '.' 2>/dev/null | while read -r comment; do
+              if [ -z "$comment" ]; then continue; fi
+              
+              COMMENT_ID=$(echo "$comment" | jq -r '.id')
+              COMMENT_USER=$(echo "$comment" | jq -r '.user.login')
+              COMMENT_DATE=$(echo "$comment" | jq -r '.created_at')
+              COMMENT_BODY=$(echo "$comment" | jq -r '.body')
+              
+              # Check if comment is from the bot
+              if echo "$BOT_NAMES" | grep -qi "$COMMENT_USER"; then
+                # Check if comment is older than cutoff
+                if [[ "$COMMENT_DATE" < "$CUTOFF_DATE" ]]; then
+                  # Check if it's an acknowledgment comment
+                  IS_ACK="false"
+                  if [[ "$CLEANUP_ACKS" == "true" ]]; then
+                    if echo "$COMMENT_BODY" | grep -qiE "$ACK_PATTERNS"; then
+                      IS_ACK="true"
+                    fi
+                  fi
+                  
+                  if [[ "$IS_ACK" == "true" ]]; then
+                    if [[ "$DRY_RUN" == "true" ]]; then
+                      echo "    [DRY RUN] Would delete acknowledgment comment $COMMENT_ID (from $COMMENT_DATE)"
+                    else
+                      echo "    Deleting acknowledgment comment $COMMENT_ID..."
+                      gh api --method DELETE "/repos/${{ github.repository }}/issues/comments/$COMMENT_ID" || echo "      ⚠️ Failed to delete"
+                      DELETED_COUNT=$((DELETED_COUNT + 1))
+                    fi
+                  else
+                    echo "    Keeping substantive comment $COMMENT_ID"
+                    SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+                  fi
+                fi
+              fi
+            done
+          done
+          
+          echo "pr_deleted=$DELETED_COUNT" >> $GITHUB_OUTPUT
+          echo "pr_skipped=$SKIPPED_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Generate cleanup summary
+        if: always()
+        env:
+          DRY_RUN: ${{ steps.config.outputs.dry_run }}
+        run: |
+          {
+            echo "## 🧹 Masu Sensei Cleanup Report"
+            echo ""
+            if [[ "$DRY_RUN" == "true" ]]; then
+              echo "> [!NOTE]"
+              echo "> This was a **dry run**. No comments were actually deleted."
+              echo "> Run again with \`dry_run=false\` to perform the cleanup."
+              echo ""
+            fi
+            echo "The sensei has tidied the dojo. Old acknowledgment comments from closed issues and PRs have been addressed."
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| **Mode** | ${{ steps.config.outputs.dry_run == 'true' && '🧪 Dry Run' || '🧹 Cleanup' }} |"
+            echo "| **Age Threshold** | ${{ steps.config.outputs.max_age_days }} days |"
+            echo "| **Target** | ${{ steps.config.outputs.target_type }} |"
+            echo "| **Cutoff Date** | ${{ steps.config.outputs.cutoff_date }} |"
+            echo ""
+            echo "---"
+            echo "_A tidy repository is a focused mind. — Masu Sensei_"
+          } >> $GITHUB_STEP_SUMMARY

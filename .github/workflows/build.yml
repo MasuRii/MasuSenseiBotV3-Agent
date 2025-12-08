@@ -1,0 +1,209 @@
+name: 🔨 Build Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      validate_all:
+        description: 'Validate all files, not just changed ones'
+        required: false
+        type: boolean
+        default: false
+  push:
+    paths:
+      - '.github/workflows/**'
+      - '.github/prompts/**'
+      - '.github/actions/**'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/prompts/**'
+      - '.github/actions/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate-yaml:
+    name: 📋 Validate YAML Syntax
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Create yamllint config
+        run: |
+          cat > .yamllint.yml << 'EOF'
+          extends: default
+          rules:
+            line-length:
+              max: 200
+              allow-non-breakable-words: true
+              allow-non-breakable-inline-mappings: true
+            truthy:
+              check-keys: false
+            comments:
+              min-spaces-from-content: 1
+            document-start: disable
+          EOF
+
+      - name: Validate workflow files
+        run: |
+          echo "🔍 Validating workflow YAML files..."
+          yamllint -c .yamllint.yml .github/workflows/*.yml
+          echo "✅ All workflow files are valid YAML"
+
+      - name: Validate action files
+        run: |
+          echo "🔍 Validating action YAML files..."
+          find .github/actions -name "*.yml" -o -name "*.yaml" | xargs -r yamllint -c .yamllint.yml
+          echo "✅ All action files are valid YAML"
+
+  validate-workflows:
+    name: 🔧 Check Workflow Best Practices
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for required permissions
+        run: |
+          echo "🔍 Checking for explicit permissions declarations..."
+          MISSING_PERMS=0
+          for file in .github/workflows/*.yml; do
+            if ! grep -q "^permissions:" "$file"; then
+              echo "⚠️ Warning: $file missing top-level permissions declaration"
+              MISSING_PERMS=$((MISSING_PERMS + 1))
+            fi
+          done
+          if [ $MISSING_PERMS -gt 0 ]; then
+            echo "::warning::$MISSING_PERMS workflow(s) missing explicit permissions"
+          else
+            echo "✅ All workflows have explicit permissions"
+          fi
+
+      - name: Check for deprecated actions
+        run: |
+          echo "🔍 Checking for deprecated action versions..."
+          DEPRECATED=0
+          # Check for actions/checkout@v2 or v3
+          if grep -r "actions/checkout@v[23]" .github/workflows/; then
+            echo "⚠️ Found deprecated checkout action (use v4)"
+            DEPRECATED=$((DEPRECATED + 1))
+          fi
+          # Check for actions/setup-python@v3 or earlier
+          if grep -r "actions/setup-python@v[123]" .github/workflows/; then
+            echo "⚠️ Found deprecated setup-python action (use v5)"
+            DEPRECATED=$((DEPRECATED + 1))
+          fi
+          if [ $DEPRECATED -gt 0 ]; then
+            echo "::warning::Found $DEPRECATED deprecated action version(s)"
+          else
+            echo "✅ No deprecated actions found"
+          fi
+
+      - name: Check for hardcoded secrets
+        run: |
+          echo "🔍 Checking for potential hardcoded secrets..."
+          FOUND_SECRETS=0
+          # Look for common secret patterns (but not in comments or strings about secrets)
+          if grep -rE "(ghp_[a-zA-Z0-9]{36}|sk-[a-zA-Z0-9]{48})" .github/ --include="*.yml" --include="*.yaml"; then
+            echo "❌ Potential hardcoded secrets found!"
+            FOUND_SECRETS=1
+          fi
+          if [ $FOUND_SECRETS -gt 0 ]; then
+            echo "::error::Hardcoded secrets detected in workflow files"
+            exit 1
+          else
+            echo "✅ No hardcoded secrets detected"
+          fi
+
+  validate-prompts:
+    name: 📝 Validate Prompt Files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check prompt file existence
+        run: |
+          echo "🔍 Checking required prompt files..."
+          REQUIRED_PROMPTS=(
+            ".github/prompts/pr-review.md"
+            ".github/prompts/bot-reply.md"
+            ".github/prompts/issue-comment.md"
+            ".github/prompts/compliance-check.md"
+          )
+          MISSING=0
+          for prompt in "${REQUIRED_PROMPTS[@]}"; do
+            if [ ! -f "$prompt" ]; then
+              echo "❌ Missing: $prompt"
+              MISSING=$((MISSING + 1))
+            else
+              echo "✅ Found: $prompt"
+            fi
+          done
+          if [ $MISSING -gt 0 ]; then
+            echo "::error::$MISSING required prompt file(s) missing"
+            exit 1
+          fi
+
+      - name: Check prompt file size
+        run: |
+          echo "🔍 Checking prompt file sizes..."
+          for file in .github/prompts/*.md; do
+            SIZE=$(wc -c < "$file")
+            NAME=$(basename "$file")
+            if [ $SIZE -lt 1000 ]; then
+              echo "⚠️ Warning: $NAME seems too small ($SIZE bytes)"
+            elif [ $SIZE -gt 100000 ]; then
+              echo "⚠️ Warning: $NAME is very large ($SIZE bytes) - may affect token limits"
+            else
+              echo "✅ $NAME: $SIZE bytes"
+            fi
+          done
+
+      - name: Validate Sensei persona markers
+        run: |
+          echo "🔍 Checking for Sensei persona consistency..."
+          PERSONA_ISSUES=0
+          for file in .github/prompts/*.md; do
+            # Check for Masu Sensei identity markers
+            if ! grep -qi "masu sensei\|sensei\|masusenseibot" "$file"; then
+              echo "⚠️ Warning: $(basename $file) may be missing Sensei identity markers"
+              PERSONA_ISSUES=$((PERSONA_ISSUES + 1))
+            fi
+          done
+          if [ $PERSONA_ISSUES -gt 0 ]; then
+            echo "::warning::$PERSONA_ISSUES prompt(s) may have persona consistency issues"
+          else
+            echo "✅ All prompts contain Sensei identity markers"
+          fi
+
+  summary:
+    name: 📊 Build Summary
+    needs: [validate-yaml, validate-workflows, validate-prompts]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 🥋 Masu Sensei Build Validation Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The dojo has been inspected. Here is the assessment:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| YAML Validation | ${{ needs.validate-yaml.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Workflow Best Practices | ${{ needs.validate-workflows.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Prompt Validation | ${{ needs.validate-prompts.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Validation performed by the Build workflow - maintaining the standards of the dojo._" >> $GITHUB_STEP_SUMMARY

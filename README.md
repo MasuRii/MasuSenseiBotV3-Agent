@@ -1282,8 +1282,8 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 ## Support & Community
 
-- **Issues**: [GitHub Issues](https://github.com/Mirrowel/MasuSenseiBot-Agent/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/Mirrowel/MasuSenseiBot-Agent/discussions)
+- **Issues**: [GitHub Issues](https://github.com/MasuRii/MasuSenseiBotV3-Agent/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/MasuRii/MasuSenseiBotV3-Agent/discussions)
 - **Documentation**: This README + OpenCode docs
 - **Contributing**: See [Development Guide](#development-guide)
 
