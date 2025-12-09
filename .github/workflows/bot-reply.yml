@@ -78,7 +78,11 @@ jobs:
           # Fetch and Format Context based on type
           if [[ "$IS_PR" == "true" ]]; then
             # Fetch PR data
-            pr_json=$(gh pr view ${{ env.THREAD_NUMBER }} --repo ${{ github.repository }} --json author,title,body,createdAt,state,headRefName,baseRefName,headRefOid,additions,deletions,commits,files,closingIssuesReferences,headRepository)
+            PR_FIELDS="author,title,body,createdAt,state,headRefName,baseRefName"
+            PR_FIELDS="$PR_FIELDS,headRefOid,additions,deletions,commits,files"
+            PR_FIELDS="$PR_FIELDS,closingIssuesReferences,headRepository"
+            pr_json=$(gh pr view ${{ env.THREAD_NUMBER }} --repo ${{ github.repository }} \
+              --json $PR_FIELDS)
 
             # Debug: Output pr_json and review_comments_json for inspection
             echo "$pr_json" > pr_json.txt
@@ -153,7 +157,7 @@ jobs:
               -f query="$GRAPHQL_QUERY")
 
             echo "$discussion_data" > discussion_data.txt
-            
+
             # For prompt context
             echo "PR_HEAD_SHA=$(echo "$pr_json" | jq -r .headRefOid)" >> $GITHUB_ENV
             echo "THREAD_AUTHOR=$(echo "$pr_json" | jq -r .author.login)" >> $GITHUB_ENV
@@ -184,21 +188,21 @@ jobs:
                 else
                   "No general comments."
                 end')
-            
+
             # ===== ACCURATE FILTERING & COUNTING (Fixed math logic) =====
-            
+
             stats_json=$(echo "$discussion_data" | jq -r --argjson ignored "$IGNORE_BOT_NAMES_JSON" '
               # Define filter logic
               def is_valid_review:
                 (.author.login? // "unknown") as $login | $ignored | index($login) | not
                 and (.isMinimized != true);
-              
+
               def is_valid_comment:
-                 .isResolved != true 
+                 .isResolved != true
                  and .isOutdated != true
                  and (((.comments.nodes // []) | first | .isMinimized) != true)
                  and ((((.comments.nodes // []) | first | .pullRequestReview.isMinimized) // false) != true);
-              
+
               def is_valid_inline:
                 .isMinimized != true
                 and ((.pullRequestReview.isMinimized // false) != true)
@@ -213,7 +217,7 @@ jobs:
               def raw_threads: (.data.repository.pullRequest.reviewThreads.nodes // []);
               def valid_threads: (raw_threads | map(select(is_valid_comment)));
               def all_valid_comments: (valid_threads | map(.comments.nodes // []) | flatten | map(select(is_valid_inline)));
-              
+
               # We count total comments as "active/unresolved threads comments"
               def total_review_comments: (raw_threads | map(select(.isResolved != true and .isOutdated != true)) | map(.comments.nodes // []) | flatten | length);
               def included_review_comments: (all_valid_comments | length);
@@ -227,31 +231,31 @@ jobs:
                 excluded_comments: (total_review_comments - included_review_comments)
               }
             ')
-            
+
             # Export stats to env vars
             filtered_reviews=$(echo "$stats_json" | jq .included_reviews)
             excluded_reviews=$(echo "$stats_json" | jq .excluded_reviews)
             filtered_comments=$(echo "$stats_json" | jq .included_review_comments)
             excluded_comments=$(echo "$stats_json" | jq .excluded_comments)
-            
+
             echo "✓ Filtered reviews: $filtered_reviews included, $excluded_reviews excluded (ignored bots/hidden)"
             echo "✓ Filtered review comments: $filtered_comments included, $excluded_comments excluded (outdated/hidden)"
-            
+
             # Reviews Text
             review_filter_err=$(mktemp 2>/dev/null || echo "/tmp/review_filter_err.log")
             if reviews=$(echo "$discussion_data" | jq -r --argjson ignored "$IGNORE_BOT_NAMES_JSON" '
-              if ((((.data.repository.pullRequest.reviews.nodes // []) | length) > 0)) then 
-                ((.data.repository.pullRequest.reviews.nodes // [])[]? 
+              if ((((.data.repository.pullRequest.reviews.nodes // []) | length) > 0)) then
+                ((.data.repository.pullRequest.reviews.nodes // [])[]?
                 | select(
                     ((.author.login? // "unknown") as $login | $ignored | index($login) | not)
                     and (.isMinimized != true)
-                  ) 
-                | "- " + (.author.login? // "unknown") + " at " + (.submittedAt // "N/A") + ":\n - Review body: " + (.body // "(No summary comment)") + "\n - State: " + (.state // "UNKNOWN") + "\n") 
-              else 
-                "No formal reviews." 
+                  )
+                | "- " + (.author.login? // "unknown") + " at " + (.submittedAt // "N/A") + ":\n - Review body: " + (.body // "(No summary comment)") + "\n - State: " + (.state // "UNKNOWN") + "\n")
+              else
+                "No formal reviews."
               end' 2>"$review_filter_err"); then
                if [ -s "$review_filter_err" ]; then
-                 echo "::debug::jq stderr (reviews) emitted output:" 
+                 echo "::debug::jq stderr (reviews) emitted output:"
                  cat "$review_filter_err"
                fi
             else
@@ -260,7 +264,7 @@ jobs:
                echo "FILTER_ERROR_REVIEWS=true" >> $GITHUB_ENV
             fi
             rm -f "$review_filter_err" || true
-            
+
             # Review Comments Text
             review_comment_filter_err=$(mktemp 2>/dev/null || echo "/tmp/review_comment_filter_err.log")
             if review_comments=$(echo "$discussion_data" | jq -r --argjson ignored "$IGNORE_BOT_NAMES_JSON" '
@@ -276,8 +280,12 @@ jobs:
                              and ((.pullRequestReview.isMinimized // false) != true)
                              and (((.author.login? // "unknown") as $login | $ignored | index($login)) | not))))
               | if length > 0 then
-                  map("- " + (.author.login? // "unknown") + " at " + (.createdAt // "N/A") + " (" + (.path // "Unknown file") + ":" + ((.line // .originalLine // "N/A") | tostring) + "):\n   " + ((.body // "") | tostring) + "\n")
-                  | join("")
+                  map(
+                    "- " + (.author.login? // "unknown") + " at " + (.createdAt // "N/A") +
+                    " (" + (.path // "Unknown file") + ":" +
+                    ((.line // .originalLine // "N/A") | tostring) + "):\n   " +
+                    ((.body // "") | tostring) + "\n"
+                  ) | join("")
                 else
                   "No inline review comments."
                 end' 2>"$review_comment_filter_err"); then
@@ -291,7 +299,7 @@ jobs:
                echo "FILTER_ERROR_COMMENTS=true" >> $GITHUB_ENV
             fi
             rm -f "$review_comment_filter_err" || true
-            
+
             # Store filtering statistics
             echo "EXCLUDED_REVIEWS=$excluded_reviews" >> $GITHUB_ENV
             echo "EXCLUDED_COMMENTS=$excluded_comments" >> $GITHUB_ENV
@@ -312,7 +320,7 @@ jobs:
               for number in $issue_numbers; do
                 # Fetch each issue's data separately. This is more reliable for cross-repo issues or permission nuances.
                 issue_details_json=$(gh issue view "$number" --repo "${{ github.repository }}" --json title,body 2>/dev/null || echo "{}")
-                
+
                 issue_title=$(echo "$issue_details_json" | jq -r '.title // "Title not available"')
                 issue_body=$(echo "$issue_details_json" | jq -r '.body // "Body not available"')
                 linked_issues_content+=$(printf "<issue>\n <number>#%s</number>\n <title>%s</title>\n <body>\n%s\n</body>\n</issue>\n" "$number" "$issue_title" "$issue_body")
@@ -321,9 +329,12 @@ jobs:
             fi
 
             # Prepare cross-references from timeline data
-            references=$(echo "$timeline_data" | jq -r '.[] | select(.event == "cross-referenced") | .source.issue | "- Mentioned in \(.html_url | if contains("/pull/") then "PR" else "Issue" end): #\(.number) - \(.title)"')
+            references=$(echo "$timeline_data" | jq -r '
+              .[] | select(.event == "cross-referenced") | .source.issue |
+              "- Mentioned in \(.html_url | if contains("/pull/") then "PR" else "Issue" end): #\(.number) - \(.title)"
+            ')
             if [ -z "$references" ]; then references="This PR has not been mentioned in other issues or PRs."; fi
-            
+
             # Step 1: Write the header for the multi-line environment variable
             echo "THREAD_CONTEXT<<$CONTEXT_DELIMITER" >> "$GITHUB_ENV"
             # Step 2: Append the content line by line
@@ -381,10 +392,21 @@ jobs:
             title=$(echo "$issue_data" | jq -r .title)
             body=$(echo "$issue_data" | jq -r '.body // "(No description provided)"')
             # Prepare comments (exclude ignored bots)
-            comments=$(echo "$issue_data" | jq -r --argjson ignored "$IGNORE_BOT_NAMES_JSON" 'if (((.comments // []) | length) > 0) then ((.comments[]? | select((.author.login as $login | $ignored | index($login)) | not)) | "- " + (.author.login // "unknown") + " at " + (.createdAt // "N/A") + ":\n" + ((.body // "") | tostring) + "\n") else "No comments have been posted yet." end')
+            comments=$(echo "$issue_data" | jq -r --argjson ignored "$IGNORE_BOT_NAMES_JSON" '
+              if (((.comments // []) | length) > 0) then
+                ((.comments[]? | select((.author.login as $login | $ignored | index($login)) | not)) |
+                "- " + (.author.login // "unknown") + " at " + (.createdAt // "N/A") + ":\n" +
+                ((.body // "") | tostring) + "\n")
+              else
+                "No comments have been posted yet."
+              end
+            ')
 
             # Prepare cross-references
-            references=$(echo "$timeline_data" | jq -r '.[] | select(.event == "cross-referenced") | .source.issue | "- Mentioned in \(.html_url | if contains("/pull/") then "PR" else "Issue" end): #\(.number) - \(.title)"')
+            references=$(echo "$timeline_data" | jq -r '
+              .[] | select(.event == "cross-referenced") | .source.issue |
+              "- Mentioned in \(.html_url | if contains("/pull/") then "PR" else "Issue" end): #\(.number) - \(.title)"
+            ')
             if [ -z "$references" ]; then references="No other issues or PRs have mentioned this thread."; fi
 
             # Step 1: Write the header
@@ -500,7 +522,7 @@ jobs:
           BASE_BRANCH="${BASE_BRANCH}"
           CURRENT_SHA="${PR_HEAD_SHA}"
           LAST_SHA="${{ steps.review_type.outputs.last_reviewed_sha }}"
-          
+
           # Always generate full diff against base branch
           echo "Generating full PR diff against base branch: $BASE_BRANCH"
           if git fetch origin "$BASE_BRANCH":refs/remotes/origin/"$BASE_BRANCH" 2>/dev/null; then
@@ -522,7 +544,7 @@ jobs:
           else
             echo "(Base branch not available for diff. Please refer to the changed files list above.)" > "$GITHUB_WORKSPACE/.masusenseibot_files/first_review_diff.txt"
           fi
-          
+
           # Generate incremental diff if this is a follow-up review
           if [ -n "$LAST_SHA" ]; then
             echo "Generating incremental diff from $LAST_SHA to $CURRENT_SHA"
@@ -584,5 +606,7 @@ jobs:
               INCREMENTAL_DIFF_PATH=""
               LAST_REVIEWED_SHA=""
             fi
-            VARS='$THREAD_CONTEXT $NEW_COMMENT_AUTHOR $NEW_COMMENT_BODY $THREAD_NUMBER $GITHUB_REPOSITORY $THREAD_AUTHOR $PR_HEAD_SHA $IS_FIRST_REVIEW $FULL_DIFF_PATH $INCREMENTAL_DIFF_PATH $LAST_REVIEWED_SHA'
+            VARS='$THREAD_CONTEXT $NEW_COMMENT_AUTHOR $NEW_COMMENT_BODY $THREAD_NUMBER'
+            VARS="$VARS"' $GITHUB_REPOSITORY $THREAD_AUTHOR $PR_HEAD_SHA $IS_FIRST_REVIEW'
+            VARS="$VARS"' $FULL_DIFF_PATH $INCREMENTAL_DIFF_PATH $LAST_REVIEWED_SHA'
             FULL_DIFF_PATH="$FULL_DIFF_PATH" INCREMENTAL_DIFF_PATH="$INCREMENTAL_DIFF_PATH" LAST_REVIEWED_SHA="$LAST_REVIEWED_SHA" envsubst "$VARS" < /tmp/bot-reply.md | opencode run --share -

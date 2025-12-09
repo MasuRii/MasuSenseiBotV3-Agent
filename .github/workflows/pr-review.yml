@@ -103,7 +103,11 @@ jobs:
           GH_TOKEN: ${{ steps.setup.outputs.token }}
         run: |
           # Fetch core PR metadata (comments and reviews fetched via GraphQL below)
-          pr_json=$(gh pr view ${{ env.PR_NUMBER }} --repo ${{ github.repository }} --json author,title,body,createdAt,state,headRefName,baseRefName,headRefOid,additions,deletions,commits,files,closingIssuesReferences,headRepository)
+          PR_FIELDS="author,title,body,createdAt,state,headRefName,baseRefName"
+          PR_FIELDS="$PR_FIELDS,headRefOid,additions,deletions,commits,files"
+          PR_FIELDS="$PR_FIELDS,closingIssuesReferences,headRepository"
+          pr_json=$(gh pr view ${{ env.PR_NUMBER }} --repo ${{ github.repository }} \
+            --json $PR_FIELDS)
           # Fetch timeline data to find cross-references
           timeline_data=$(gh api "/repos/${{ github.repository }}/issues/${{ env.PR_NUMBER }}/timeline")
 
@@ -176,7 +180,7 @@ jobs:
           # Debug: Output pr_json and the discussion GraphQL payload for inspection
           echo "$pr_json" > pr_json.txt
           echo "$discussion_data" > discussion_data.txt
-          
+
           # Prepare metadata
           author=$(echo "$pr_json" | jq -r .author.login)
           created_at=$(echo "$pr_json" | jq -r .createdAt)
@@ -201,22 +205,22 @@ jobs:
               else
                 "No general comments."
               end')
-          
+
           # ===== ACCURATE FILTERING & COUNTING (Fixed math logic) =====
-          
+
           # Calculate all stats using jq integers directly to avoid grep/text parsing errors
           stats_json=$(echo "$discussion_data" | jq -r --argjson ignored "$IGNORE_BOT_NAMES_JSON" '
             # Define filter logic
             def is_valid_review:
               (.author.login? // "unknown") as $login | $ignored | index($login) | not
               and (.isMinimized != true);
-            
+
             def is_valid_comment:
-               .isResolved != true 
+               .isResolved != true
                and .isOutdated != true
                and (((.comments.nodes // []) | first | .isMinimized) != true)
                and ((((.comments.nodes // []) | first | .pullRequestReview.isMinimized) // false) != true);
-            
+
             def is_valid_inline:
               .isMinimized != true
               and ((.pullRequestReview.isMinimized // false) != true)
@@ -231,7 +235,7 @@ jobs:
             def raw_threads: (.data.repository.pullRequest.reviewThreads.nodes // []);
             def valid_threads: (raw_threads | map(select(is_valid_comment)));
             def all_valid_comments: (valid_threads | map(.comments.nodes // []) | flatten | map(select(is_valid_inline)));
-            
+
             # We count total comments as "active/unresolved threads comments"
             def total_review_comments: (raw_threads | map(select(.isResolved != true and .isOutdated != true)) | map(.comments.nodes // []) | flatten | length);
             def included_review_comments: (all_valid_comments | length);
@@ -245,33 +249,33 @@ jobs:
               excluded_comments: (total_review_comments - included_review_comments)
             }
           ')
-          
+
           # Export stats to env vars
           filtered_reviews=$(echo "$stats_json" | jq .included_reviews)
           excluded_reviews=$(echo "$stats_json" | jq .excluded_reviews)
           filtered_comments=$(echo "$stats_json" | jq .included_review_comments)
           excluded_comments=$(echo "$stats_json" | jq .excluded_comments)
-          
+
           echo "✓ Filtered reviews: $filtered_reviews included, $excluded_reviews excluded (ignored bots/hidden)"
           echo "✓ Filtered review comments: $filtered_comments included, $excluded_comments excluded (outdated/hidden)"
-          
+
           # Generate Text Content (using same filters as stats)
-          
+
           # Reviews Text
           review_filter_err=$(mktemp 2>/dev/null || echo "/tmp/review_filter_err.log")
           if reviews=$(echo "$discussion_data" | jq -r --argjson ignored "$IGNORE_BOT_NAMES_JSON" '
-            if ((((.data.repository.pullRequest.reviews.nodes // []) | length) > 0)) then 
-              ((.data.repository.pullRequest.reviews.nodes // [])[]? 
+            if ((((.data.repository.pullRequest.reviews.nodes // []) | length) > 0)) then
+              ((.data.repository.pullRequest.reviews.nodes // [])[]?
               | select(
                   ((.author.login? // "unknown") as $login | $ignored | index($login) | not)
                   and (.isMinimized != true)
-                ) 
-              | "- " + (.author.login? // "unknown") + " at " + (.submittedAt // "N/A") + ":\n - Review body: " + (.body // "(No summary comment)") + "\n - State: " + (.state // "UNKNOWN") + "\n") 
-            else 
-              "No formal reviews." 
+                )
+              | "- " + (.author.login? // "unknown") + " at " + (.submittedAt // "N/A") + ":\n - Review body: " + (.body // "(No summary comment)") + "\n - State: " + (.state // "UNKNOWN") + "\n")
+            else
+              "No formal reviews."
             end' 2>"$review_filter_err"); then
              if [ -s "$review_filter_err" ]; then
-               echo "::debug::jq stderr (reviews) emitted output:" 
+               echo "::debug::jq stderr (reviews) emitted output:"
                cat "$review_filter_err"
              fi
           else
@@ -280,7 +284,7 @@ jobs:
              echo "FILTER_ERROR_REVIEWS=true" >> $GITHUB_ENV
           fi
           rm -f "$review_filter_err" || true
-          
+
           # Review Comments Text
           review_comment_filter_err=$(mktemp 2>/dev/null || echo "/tmp/review_comment_filter_err.log")
           if review_comments=$(echo "$discussion_data" | jq -r --argjson ignored "$IGNORE_BOT_NAMES_JSON" '
@@ -296,8 +300,12 @@ jobs:
                            and ((.pullRequestReview.isMinimized // false) != true)
                            and (((.author.login? // "unknown") as $login | $ignored | index($login)) | not))))
             | if length > 0 then
-                map("- " + (.author.login? // "unknown") + " at " + (.createdAt // "N/A") + " (" + (.path // "Unknown file") + ":" + ((.line // .originalLine // "N/A") | tostring) + "):\n   " + ((.body // "") | tostring) + "\n")
-                | join("")
+                map(
+                  "- " + (.author.login? // "unknown") + " at " + (.createdAt // "N/A") +
+                  " (" + (.path // "Unknown file") + ":" +
+                  ((.line // .originalLine // "N/A") | tostring) + "):\n   " +
+                  ((.body // "") | tostring) + "\n"
+                ) | join("")
               else
                 "No inline review comments."
               end' 2>"$review_comment_filter_err"); then
@@ -311,7 +319,7 @@ jobs:
              echo "FILTER_ERROR_COMMENTS=true" >> $GITHUB_ENV
           fi
           rm -f "$review_comment_filter_err" || true
-          
+
           # Store filtering statistics
           echo "EXCLUDED_REVIEWS=$excluded_reviews" >> $GITHUB_ENV
           echo "EXCLUDED_COMMENTS=$excluded_comments" >> $GITHUB_ENV
@@ -332,7 +340,10 @@ jobs:
           fi
 
           # Prepare cross-references from timeline data
-          references=$(echo "$timeline_data" | jq -r '.[] | select(.event == "cross-referenced") | .source.issue | "- Mentioned in \(.html_url | if contains("/pull/") then "PR" else "Issue" end): #\(.number) - \(.title)"')
+          references=$(echo "$timeline_data" | jq -r '
+            .[] | select(.event == "cross-referenced") | .source.issue |
+            "- Mentioned in \(.html_url | if contains("/pull/") then "PR" else "Issue" end): #\(.number) - \(.title)"
+          ')
           if [ -z "$references" ]; then references="This PR has not been mentioned in other issues or PRs."; fi
 
           # Build filtering summary for AI context
@@ -385,7 +396,7 @@ jobs:
           echo "PR_AUTHOR=$author" >> $GITHUB_ENV
           echo "BASE_BRANCH=$base_branch" >> $GITHUB_ENV
 
-      
+
 
       - name: Determine Review Type and Last Reviewed SHA
         id: review_type
@@ -461,7 +472,7 @@ jobs:
             echo "" > last_review_sha.txt
           fi
 
-      
+
 
       - name: Save secure prompt from base branch
         run: cp .github/prompts/pr-review.md /tmp/pr-review.md
@@ -482,23 +493,23 @@ jobs:
           DIFF_CONTENT=""
           # Ensure dedicated diff folder exists in the workspace (hidden to avoid accidental use)
           mkdir -p "$GITHUB_WORKSPACE/.masusenseibot_files"
-          
+
           echo "Generating full PR diff against base branch: $BASE_BRANCH"
-          
+
           # Fetch the base branch to ensure we have it
           if git fetch origin "$BASE_BRANCH":refs/remotes/origin/"$BASE_BRANCH" 2>/dev/null; then
             echo "Successfully fetched base branch $BASE_BRANCH."
-            
+
             # Find merge base (common ancestor)
             if MERGE_BASE=$(git merge-base origin/"$BASE_BRANCH" "$CURRENT_SHA" 2>/dev/null); then
               echo "Found merge base: $MERGE_BASE"
-              
+
               # Generate diff from merge base to current commit
               if DIFF_CONTENT=$(git diff --patch "$MERGE_BASE".."$CURRENT_SHA" 2>/dev/null); then
                 DIFF_SIZE=${#DIFF_CONTENT}
                 DIFF_LINES=$(echo "$DIFF_CONTENT" | wc -l)
                 echo "Generated PR diff: $DIFF_LINES lines, $DIFF_SIZE characters"
-                
+
                 # Truncate if too large (500KB limit to avoid context overflow)
                 if [ $DIFF_SIZE -gt 500000 ]; then
                   echo "::warning::PR diff is very large ($DIFF_SIZE chars). Truncating to 500KB."
@@ -525,7 +536,7 @@ jobs:
             # Write error-case diff directly into the repository workspace folder
             echo "$DIFF_CONTENT" > "$GITHUB_WORKSPACE/.masusenseibot_files/first_review_diff.txt"
           fi
-          
+
         env:
           BASE_BRANCH: ${{ env.BASE_BRANCH }}
 
@@ -539,7 +550,7 @@ jobs:
           # Ensure dedicated diff folder exists in the workspace (hidden to avoid accidental use)
           mkdir -p "$GITHUB_WORKSPACE/.masusenseibot_files"
           echo "Attempting to generate incremental diff from $LAST_SHA to $CURRENT_SHA"
-          
+
           # Fetch the last reviewed commit, handle potential errors (e.g., rebased/force-pushed commit)
           # First try fetching from origin
           if git fetch origin $LAST_SHA 2>/dev/null || git cat-file -e $LAST_SHA^{commit} 2>/dev/null; then
@@ -549,7 +560,7 @@ jobs:
               DIFF_SIZE=${#DIFF_CONTENT}
               DIFF_LINES=$(echo "$DIFF_CONTENT" | wc -l)
               echo "Generated incremental diff: $DIFF_LINES lines, $DIFF_SIZE characters"
-              
+
               # Truncate if too large (500KB limit)
               if [ $DIFF_SIZE -gt 500000 ]; then
                 echo "::warning::Incremental diff is very large ($DIFF_SIZE chars). Truncating to 500KB."
@@ -568,7 +579,7 @@ jobs:
             # Ensure an empty incremental diff file exists in the workspace folder when last-SHA fetch fails
             echo "" > "$GITHUB_WORKSPACE/.masusenseibot_files/incremental_diff.txt"
           fi
-          
+
           # Ensure workspace diff files exist even on edge cases (in the hidden folder)
           [ -f "$GITHUB_WORKSPACE/.masusenseibot_files/first_review_diff.txt" ] || touch "$GITHUB_WORKSPACE/.masusenseibot_files/first_review_diff.txt"
           [ -f "$GITHUB_WORKSPACE/.masusenseibot_files/incremental_diff.txt" ] || touch "$GITHUB_WORKSPACE/.masusenseibot_files/incremental_diff.txt"
@@ -635,12 +646,12 @@ jobs:
           PR_HEAD_SHA: ${{ env.PR_HEAD_SHA }}
         run: |
           set -e # Fail fast on errors
-          
+
           # Wait briefly for API consistency
           sleep 5
 
           echo "Verifying latest bot review for required footers..."
-          
+
           # 1. Define a cutoff timestamp (e.g., 2 minutes ago)
           cutoff_ts=$(date -u -d "2 minutes ago" +"%Y-%m-%dT%H:%M:%SZ")
           echo "Looking for reviews submitted after: $cutoff_ts"
@@ -652,19 +663,19 @@ jobs:
 
           for ((i=1; i<=MAX_RETRIES; i++)); do
             echo "Attempt $i: Fetching reviews..."
-            
+
             if ! reviews=$(gh api "/repos/${{ github.repository }}/pulls/${{ env.PR_NUMBER }}/reviews" --paginate); then
                echo "::warning::Failed to fetch reviews on attempt $i"
                sleep $RETRY_DELAY
                continue
             fi
-            
+
             # Extract latest bot review (id and body)
             latest_review_json=$(echo "$reviews" | jq -c --argjson bots "$BOT_NAMES_JSON" --arg cutoff "$cutoff_ts" '
-              map(select(.user.login as $u | $bots | index($u))) 
+              map(select(.user.login as $u | $bots | index($u)))
               | map(select(.submitted_at > $cutoff))
-              | sort_by(.submitted_at) 
-              | last 
+              | sort_by(.submitted_at)
+              | last
               | {id: .databaseId, body: (.body // "")}
             ')
 
@@ -672,7 +683,7 @@ jobs:
               echo "Found recent review."
               break
             fi
-            
+
             echo "No recent review found yet. Waiting ${RETRY_DELAY}s..."
             sleep $RETRY_DELAY
           done
@@ -684,7 +695,7 @@ jobs:
 
           review_id=$(echo "$latest_review_json" | jq -r .id)
           current_body=$(echo "$latest_review_json" | jq -r .body)
-          
+
           # Define expected footers
           EXPECTED_SIGNATURE="_This review was generated by an AI assistant._"
           EXPECTED_MARKER="<!-- last_reviewed_sha:${PR_HEAD_SHA} -->"
@@ -709,7 +720,7 @@ jobs:
 
           if [ "$needs_fix" = true ]; then
             echo "Attempting to auto-correct review $review_id..."
-            
+
             # Remove existing/malformed footers using regex (in perl mode for robustness)
             # 1. Remove signature
             clean_body=$(echo "$current_body" | perl -0777 -pe 's/\Q_This review was generated by an AI assistant._\E//g')

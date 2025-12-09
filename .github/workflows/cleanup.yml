@@ -60,16 +60,16 @@ jobs:
           MAX_AGE="${{ github.event.inputs.max_age_days || '30' }}"
           TARGET="${{ github.event.inputs.target_type || 'all' }}"
           CLEANUP_ACKS="${{ github.event.inputs.cleanup_acknowledgments || 'true' }}"
-          
+
           echo "dry_run=$DRY_RUN" >> $GITHUB_OUTPUT
           echo "max_age_days=$MAX_AGE" >> $GITHUB_OUTPUT
           echo "target_type=$TARGET" >> $GITHUB_OUTPUT
           echo "cleanup_acks=$CLEANUP_ACKS" >> $GITHUB_OUTPUT
-          
+
           # Calculate cutoff date
           CUTOFF_DATE=$(date -d "$MAX_AGE days ago" +%Y-%m-%dT%H:%M:%SZ)
           echo "cutoff_date=$CUTOFF_DATE" >> $GITHUB_OUTPUT
-          
+
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "🧹 Masu Sensei Cleanup Configuration"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -89,28 +89,28 @@ jobs:
           CLEANUP_ACKS: ${{ steps.config.outputs.cleanup_acks }}
         run: |
           echo "🔍 Searching for closed issues with bot comments..."
-          
+
           DELETED_COUNT=0
           SKIPPED_COUNT=0
-          
+
           # Get closed issues from the last 90 days that might have bot comments
           ISSUES=$(gh issue list --repo "${{ github.repository }}" --state closed --limit $MAX_ITEMS_PER_RUN --json number,closedAt,title)
-          
+
           echo "$ISSUES" | jq -c '.[]' | while read -r issue; do
             ISSUE_NUMBER=$(echo "$issue" | jq -r '.number')
             ISSUE_TITLE=$(echo "$issue" | jq -r '.title')
-            
+
             echo "  Processing Issue #$ISSUE_NUMBER: $ISSUE_TITLE"
-            
+
             # Get comments on this issue
             COMMENTS=$(gh api "/repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments" --jq '.[]')
-            
+
             echo "$COMMENTS" | jq -c '.' | while read -r comment; do
               COMMENT_ID=$(echo "$comment" | jq -r '.id')
               COMMENT_USER=$(echo "$comment" | jq -r '.user.login')
               COMMENT_DATE=$(echo "$comment" | jq -r '.created_at')
               COMMENT_BODY=$(echo "$comment" | jq -r '.body')
-              
+
               # Check if comment is from the bot
               if echo "$BOT_NAMES" | grep -qi "$COMMENT_USER"; then
                 # Check if comment is older than cutoff
@@ -122,7 +122,7 @@ jobs:
                       IS_ACK="true"
                     fi
                   fi
-                  
+
                   if [[ "$IS_ACK" == "true" ]] || [[ "$CLEANUP_ACKS" == "false" ]]; then
                     if [[ "$DRY_RUN" == "true" ]]; then
                       echo "    [DRY RUN] Would delete comment $COMMENT_ID (from $COMMENT_DATE)"
@@ -139,7 +139,7 @@ jobs:
               fi
             done
           done
-          
+
           echo "issue_deleted=$DELETED_COUNT" >> $GITHUB_OUTPUT
           echo "issue_skipped=$SKIPPED_COUNT" >> $GITHUB_OUTPUT
 
@@ -152,30 +152,30 @@ jobs:
           CLEANUP_ACKS: ${{ steps.config.outputs.cleanup_acks }}
         run: |
           echo "🔍 Searching for closed PRs with bot comments..."
-          
+
           DELETED_COUNT=0
           SKIPPED_COUNT=0
-          
+
           # Get closed/merged PRs from the last 90 days
           PRS=$(gh pr list --repo "${{ github.repository }}" --state closed --limit $MAX_ITEMS_PER_RUN --json number,closedAt,title,mergedAt)
-          
+
           echo "$PRS" | jq -c '.[]' | while read -r pr; do
             PR_NUMBER=$(echo "$pr" | jq -r '.number')
             PR_TITLE=$(echo "$pr" | jq -r '.title')
-            
+
             echo "  Processing PR #$PR_NUMBER: $PR_TITLE"
-            
+
             # Get comments on this PR (issue comments, not review comments)
             COMMENTS=$(gh api "/repos/${{ github.repository }}/issues/$PR_NUMBER/comments" --jq '.[]')
-            
+
             echo "$COMMENTS" | jq -c '.' 2>/dev/null | while read -r comment; do
               if [ -z "$comment" ]; then continue; fi
-              
+
               COMMENT_ID=$(echo "$comment" | jq -r '.id')
               COMMENT_USER=$(echo "$comment" | jq -r '.user.login')
               COMMENT_DATE=$(echo "$comment" | jq -r '.created_at')
               COMMENT_BODY=$(echo "$comment" | jq -r '.body')
-              
+
               # Check if comment is from the bot
               if echo "$BOT_NAMES" | grep -qi "$COMMENT_USER"; then
                 # Check if comment is older than cutoff
@@ -187,7 +187,7 @@ jobs:
                       IS_ACK="true"
                     fi
                   fi
-                  
+
                   if [[ "$IS_ACK" == "true" ]]; then
                     if [[ "$DRY_RUN" == "true" ]]; then
                       echo "    [DRY RUN] Would delete acknowledgment comment $COMMENT_ID (from $COMMENT_DATE)"
@@ -204,7 +204,7 @@ jobs:
               fi
             done
           done
-          
+
           echo "pr_deleted=$DELETED_COUNT" >> $GITHUB_OUTPUT
           echo "pr_skipped=$SKIPPED_COUNT" >> $GITHUB_OUTPUT
 
