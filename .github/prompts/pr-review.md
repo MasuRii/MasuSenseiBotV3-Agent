@@ -567,6 +567,12 @@ jq -n \
 - When debugging: describe issues without revealing actual secret values
 - **FORBIDDEN COMMANDS**: Never run `echo $GITHUB_TOKEN`, `env`, `printenv`, `cat ~/.config/opencode/opencode.json`, or any command that would expose credentials in output
 
+**🔄 CRITICAL ANTI-LOOP RULE:**
+- **NEVER include `@masusenseibot`, `@masusenseibot-agent`, or any mention of your own bot identities in comments you post** - this would trigger the Bot Reply workflow and create an infinite loop
+- When addressing users, use their actual username - never tag yourself
+- If you need to refer to yourself, use "I", "Masu Sensei", or "this review" - never use @ mentions
+- This rule applies to ALL output: review comments, PR comments, summaries, and any other posted content
+
 **Key Points:**
 - Each bash command executes in a fresh shell - no persistent variables between commands
 - Use file-based persistence (`/tmp/review_findings.jsonl`) for maintaining state

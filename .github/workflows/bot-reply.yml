@@ -6,13 +6,11 @@ on:
 
 jobs:
   continuous-reply:
-    if: >
-      ${{
-        (contains(github.event.comment.body, '@masusenseibot') || contains(github.event.comment.body, '@masusenseibot-agent'))
-        && !startsWith(github.actor, 'masusenseibot')
-        && github.event.comment.user.type != 'Bot'
-        && !startsWith(github.event.comment.user.login, 'masusenseibot')
-      }}
+    # Simple trigger: only fire when bot is explicitly mentioned in comment body.
+    # Loop prevention: The AI prompts are configured to NEVER include @masusenseibot
+    # or @masusenseibot-agent mentions in responses, so bot comments won't trigger this.
+    # This is more reliable than actor/user type checks which can fail for GitHub Apps.
+    if: ${{ contains(github.event.comment.body, '@masusenseibot') || contains(github.event.comment.body, '@masusenseibot-agent') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
