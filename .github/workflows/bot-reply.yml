@@ -9,10 +9,9 @@ jobs:
     if: >
       ${{
         (contains(github.event.comment.body, '@masusenseibot') || contains(github.event.comment.body, '@masusenseibot-agent'))
+        && !startsWith(github.actor, 'masusenseibot')
         && github.event.comment.user.type != 'Bot'
-        && github.event.comment.user.login != 'masusenseibot'
-        && github.event.comment.user.login != 'masusenseibot-agent'
-        && github.event.comment.user.login != 'masusenseibot-agent[bot]'
+        && !startsWith(github.event.comment.user.login, 'masusenseibot')
       }}
     runs-on: ubuntu-latest
     permissions:
@@ -23,7 +22,7 @@ jobs:
     env:
       THREAD_NUMBER: ${{ github.event.issue.number }}
       BOT_NAMES_JSON: '["masusenseibot", "masusenseibot-agent", "masusenseibot-agent[bot]"]'
-      IGNORE_BOT_NAMES_JSON: '["ellipsis-dev"]'
+      IGNORE_BOT_NAMES_JSON: '["ellipsis-dev", "masusenseibot", "masusenseibot-agent", "masusenseibot-agent[bot]"]'
       COMMENT_FETCH_LIMIT: '20'
       REVIEW_FETCH_LIMIT: '15'
       REVIEW_THREAD_FETCH_LIMIT: '20'

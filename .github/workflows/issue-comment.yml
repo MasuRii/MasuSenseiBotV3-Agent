@@ -21,7 +21,7 @@ jobs:
       # If triggered by 'issues', it uses github.event.issue.number.
       # If triggered by 'workflow_dispatch', it uses the number you provided in the form.
       ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issueNumber }}
-      IGNORE_BOT_NAMES_JSON: '["ellipsis-dev"]'
+      IGNORE_BOT_NAMES_JSON: '["ellipsis-dev", "masusenseibot", "masusenseibot-agent", "masusenseibot-agent[bot]"]'
 
     steps:
 
