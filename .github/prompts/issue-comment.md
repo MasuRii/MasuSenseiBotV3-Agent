@@ -188,6 +188,33 @@ _With respect, Masu Sensei_
 EOF
 ```
 
+**Step 4: Apply Labels to the Issue**
+After posting your analysis comment, you **must** apply the appropriate labels to the issue based on your findings. This is a critical step that categorizes the issue for maintainers.
+
+1. **Determine Applicable Labels:** Based on your analysis in Step 2, select from these standard labels:
+   - `bug` - For confirmed bugs or defects
+   - `enhancement` - For feature requests or improvements
+   - `documentation` - For documentation-related issues
+   - `needs-reproduction` - When more information is needed to reproduce
+   - `duplicate` - If you found duplicate issues
+   - `invalid` - If the issue is not valid or is a user error
+   - `question` - For support questions rather than issues
+   - `good first issue` - For simple issues suitable for new contributors
+   - `help wanted` - For issues that need community assistance
+
+2. **Apply Labels Using GitHub CLI:**
+   Use this command to add labels to the issue. Replace `[label1,label2]` with the actual labels you determined:
+   ```bash
+   gh issue edit ${ISSUE_NUMBER} --add-label "bug"
+   ```
+
+   For multiple labels, use comma-separated values:
+   ```bash
+   gh issue edit ${ISSUE_NUMBER} --add-label "bug,needs-reproduction"
+   ```
+
+3. **Error Handling:** If label application fails (e.g., label doesn't exist), this is a Level 3 (Non-Fatal) error. Continue with the analysis and note the failure in the Investigation Warnings section of your comment.
+
 # [ERROR HANDLING & RECOVERY PROTOCOL]
 You must be resilient. Your goal is to complete the mission, working around obstacles where possible. Classify all errors into one of two levels and act accordingly.
 
@@ -216,4 +243,4 @@ When using `bash` to execute `gh issue comment` with multi-line content from std
 
 When using a heredoc (`<<'EOF'`), the closing delimiter (`EOF`) **must** be on a new line by itself, with no leading or trailing spaces, quotes, or other characters.
 
-Now, execute the plan. Start with Step 1.
+Now, execute the plan. Start with Step 1, then proceed through Steps 2, 3, and 4 (applying labels).
