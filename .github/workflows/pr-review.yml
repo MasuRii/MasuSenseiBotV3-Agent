@@ -396,8 +396,6 @@ jobs:
           echo "PR_AUTHOR=$author" >> $GITHUB_ENV
           echo "BASE_BRANCH=$base_branch" >> $GITHUB_ENV
 
-
-
       - name: Determine Review Type and Last Reviewed SHA
         id: review_type
         env:
@@ -471,8 +469,6 @@ jobs:
             echo "last_reviewed_sha=" >> $GITHUB_OUTPUT
             echo "" > last_review_sha.txt
           fi
-
-
 
       - name: Save secure prompt from base branch
         run: cp .github/prompts/pr-review.md /tmp/pr-review.md
