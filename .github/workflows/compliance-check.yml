@@ -42,7 +42,7 @@ on:
   workflow_run:
     workflows: ["PR Review"]
     types: [completed]
-  
+
   # SECURITY: Use pull_request_target (not pull_request) to run workflow from base branch
   # This prevents malicious PRs from modifying the workflow or prompt files
   # Note: ready_for_review removed - handled by workflow_run to ensure sequential execution
@@ -66,7 +66,7 @@ jobs:
     # Note: ready_for_review will wait for PR Review to complete (see step below)
     if: |
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request_target' && 
+      (github.event_name == 'pull_request_target' &&
        (github.event.action == 'ready_for_review' ||
         (github.event.action == 'labeled' && contains(github.event.label.name, 'ready-for-merge')))) ||
       (github.event_name == 'issue_comment' &&
@@ -74,7 +74,7 @@ jobs:
        (contains(github.event.comment.body, '/masusenseibot-check') ||
         contains(github.event.comment.body, '/masusenseibot_check')))
     runs-on: ubuntu-latest
-    
+
     # Minimal permissions following principle of least privilege
     permissions:
       contents: read          # Read repository files
@@ -88,14 +88,14 @@ jobs:
       # -----------------------------------------------------------------------
       PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || github.event.workflow_run.pull_requests[0].number }}
       BOT_NAMES_JSON: '["masusenseibot", "masusenseibot-agent", "masusenseibot-agent[bot]"]'
-      
+
       # -----------------------------------------------------------------------
       # FEATURE TOGGLES
       # -----------------------------------------------------------------------
       # ENABLE_REVIEWER_MENTIONS: Prepend @mentions to compliance report
       # Set to 'true' to notify reviewers, 'false' to disable
       ENABLE_REVIEWER_MENTIONS: 'false'
-      
+
       # -----------------------------------------------------------------------
       # FILE GROUPS CONFIGURATION
       # -----------------------------------------------------------------------
@@ -112,7 +112,7 @@ jobs:
         [
           {
             "name": "Workflow Configuration",
-            "description": "When code changes are made that affect the build process, verify build.yml is updated with new steps, jobs, or release configurations. Check that code changes are reflected in build matrix, deploy steps, and CI/CD pipeline.",
+            "description": "When code changes affect the build process, verify build.yml is updated. Check that code changes are reflected in build matrix, deploy steps, and CI/CD pipeline.",
             "files": [
               ".github/workflows/bot-reply.yml",
               ".github/workflows/pr-review.yml",
@@ -123,7 +123,7 @@ jobs:
           },
           {
             "name": "Documentation",
-            "description": "Ensure README and documentation reflect code changes. For new features, verify feature documentation exists. For API changes, check that API docs are updated. For bug fixes, ensure CHANGELOG is updated.",
+            "description": "Ensure README and docs reflect code changes. Verify feature docs exist for new features, API docs for API changes, and CHANGELOG for bug fixes.",
             "files": [
               "README.md",
               "docs/**/*.md",
@@ -179,11 +179,11 @@ jobs:
           GH_TOKEN: ${{ steps.setup.outputs.token }}
         run: |
           echo "Triggered by ready_for_review - waiting for PR Review to complete..."
-          
+
           # Wait up to 30 minutes (180 checks * 10 seconds)
           MAX_ATTEMPTS=180
           ATTEMPT=0
-          
+
           while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
             # Get latest PR Review workflow run for this PR
             REVIEW_STATUS=$(gh run list \
@@ -191,12 +191,12 @@ jobs:
               --workflow "PR Review" \
               --json status,conclusion,headSha \
               --jq "[.[] | select(.headSha == \"${{ github.event.pull_request.head.sha }}\")][0] | {status, conclusion}")
-            
+
             STATUS=$(echo "$REVIEW_STATUS" | jq -r '.status // "not_found"')
             CONCLUSION=$(echo "$REVIEW_STATUS" | jq -r '.conclusion // ""')
-            
+
             echo "Attempt $((ATTEMPT + 1))/$MAX_ATTEMPTS: PR Review status=$STATUS, conclusion=$CONCLUSION"
-            
+
             if [ "$STATUS" == "completed" ]; then
               echo "✅ PR Review completed with conclusion: $CONCLUSION"
               break
@@ -205,11 +205,11 @@ jobs:
             else
               echo "⏳ PR Review still running ($STATUS), waiting..."
             fi
-            
+
             sleep 10
             ATTEMPT=$((ATTEMPT + 1))
           done
-          
+
           if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
             echo "::warning::Timed out waiting for PR Review workflow (waited 30 minutes)"
             echo "Proceeding with compliance check anyway..."
@@ -226,31 +226,31 @@ jobs:
           GH_TOKEN: ${{ steps.setup.outputs.token }}
         run: |
           pr_json=$(gh pr view ${{ env.PR_NUMBER }} --repo ${{ github.repository }} --json author,title,body,headRefOid,files,labels,reviewRequests)
-          
+
           echo "head_sha=$(echo "$pr_json" | jq -r .headRefOid)" >> $GITHUB_OUTPUT
           echo "pr_title=$(echo "$pr_json" | jq -r .title)" >> $GITHUB_OUTPUT
-          
+
           # Extract author to shell variable first (can't self-reference step outputs)
           pr_author=$(echo "$pr_json" | jq -r .author.login)
           echo "pr_author=$pr_author" >> $GITHUB_OUTPUT
-          
+
           pr_body=$(echo "$pr_json" | jq -r '.body // ""')
           echo "pr_body<<EOF" >> $GITHUB_OUTPUT
           echo "$pr_body" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-          
+
           # Changed files as space-separated list
           changed_files=$(echo "$pr_json" | jq -r '.files[] | .path' | tr '\n' ' ')
           echo "changed_files=$changed_files" >> $GITHUB_OUTPUT
-          
+
           # Changed files as JSON array
           files_json=$(echo "$pr_json" | jq -c '[.files[] | .path]')
           echo "files_json=$files_json" >> $GITHUB_OUTPUT
-          
+
           # Labels as JSON array
           labels_json=$(echo "$pr_json" | jq -c '[.labels[] | .name]')
           echo "labels_json=$labels_json" >> $GITHUB_OUTPUT
-          
+
           # Requested reviewers for mentions
           reviewers=$(echo "$pr_json" | jq -r '.reviewRequests[]? | .login' | tr '\n' ' ')
           mentions="@$pr_author"
@@ -287,7 +287,7 @@ jobs:
                 )
               | join("\n\n---\n\n")
             ')
-          
+
           if [ -n "$reviews" ]; then
             echo "PREVIOUS_REVIEWS<<EOF" >> $GITHUB_OUTPUT
             echo "$reviews" >> $GITHUB_OUTPUT
@@ -318,35 +318,35 @@ jobs:
         id: diff
         run: |
           mkdir -p "$GITHUB_WORKSPACE/.masusenseibot_files"
-          
+
           # Get base branch from PR
           pr_json=$(gh pr view ${{ env.PR_NUMBER }} --repo ${{ github.repository }} --json baseRefName)
           BASE_BRANCH=$(echo "$pr_json" | jq -r .baseRefName)
           CURRENT_SHA="${{ steps.pr_info.outputs.head_sha }}"
-          
+
           echo "Generating PR diff against base branch: $BASE_BRANCH"
-          
+
           # Fetch base branch
           if git fetch origin "$BASE_BRANCH":refs/remotes/origin/"$BASE_BRANCH" 2>/dev/null; then
             echo "Successfully fetched base branch $BASE_BRANCH"
-            
+
             # Find merge base
             if MERGE_BASE=$(git merge-base origin/"$BASE_BRANCH" "$CURRENT_SHA" 2>/dev/null); then
               echo "Found merge base: $MERGE_BASE"
-              
+
               # Generate diff
               if DIFF_CONTENT=$(git diff --patch "$MERGE_BASE".."$CURRENT_SHA" 2>/dev/null); then
                 DIFF_SIZE=${#DIFF_CONTENT}
                 DIFF_LINES=$(echo "$DIFF_CONTENT" | wc -l)
                 echo "Generated PR diff: $DIFF_LINES lines, $DIFF_SIZE characters"
-                
+
                 # Truncate if too large (500KB limit)
                 if [ $DIFF_SIZE -gt 500000 ]; then
                   echo "::warning::PR diff is very large ($DIFF_SIZE chars). Truncating to 500KB."
                   TRUNCATION_MSG=$'\n\n[DIFF TRUNCATED - PR is very large. Showing first 500KB only.]'
                   DIFF_CONTENT="${DIFF_CONTENT:0:500000}${TRUNCATION_MSG}"
                 fi
-                
+
                 echo "$DIFF_CONTENT" > "$GITHUB_WORKSPACE/.masusenseibot_files/pr_diff.txt"
                 echo "diff_path=$GITHUB_WORKSPACE/.masusenseibot_files/pr_diff.txt" >> $GITHUB_OUTPUT
               else
@@ -377,7 +377,7 @@ jobs:
           # Convert JSON config to human-readable format for the AI
           echo "FILE GROUPS FOR COMPLIANCE CHECKING:" > /tmp/file_groups.txt
           echo "" >> /tmp/file_groups.txt
-          
+
           # Parse JSON and format for prompt
           echo "$FILE_GROUPS_JSON" | jq -r '.[] |
             "Group: \(.name)\n" +
@@ -386,7 +386,7 @@ jobs:
             (.files | map("  - \(.)") | join("\n")) +
             "\n"
           ' >> /tmp/file_groups.txt
-          
+
           echo "FILE_GROUPS_PATH=/tmp/file_groups.txt" >> $GITHUB_OUTPUT
 
       # Create template structure for the compliance report
@@ -419,7 +419,7 @@ jobs:
           ### 🎯 Overall Assessment
           [AI to complete: Holistic compliance state]
 
-          ### 📝 Next Steps  
+          ### 📝 Next Steps
           [AI to complete: Actionable guidance]
 
           ---
@@ -451,7 +451,10 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           TMP_DIR="${RUNNER_TEMP:-/tmp}"
-          VARS='${PR_NUMBER} ${PR_TITLE} ${PR_BODY} ${PR_AUTHOR} ${PR_HEAD_SHA} ${CHANGED_FILES} ${CHANGED_FILES_JSON} ${PR_LABELS} ${PREVIOUS_REVIEWS} ${FILE_GROUPS} ${REPORT_TEMPLATE} ${DIFF_PATH} ${GITHUB_REPOSITORY}'
+          VARS='${PR_NUMBER} ${PR_TITLE} ${PR_BODY} ${PR_AUTHOR} ${PR_HEAD_SHA}'
+          VARS="$VARS"' ${CHANGED_FILES} ${CHANGED_FILES_JSON} ${PR_LABELS}'
+          VARS="$VARS"' ${PREVIOUS_REVIEWS} ${FILE_GROUPS} ${REPORT_TEMPLATE}'
+          VARS="$VARS"' ${DIFF_PATH} ${GITHUB_REPOSITORY}'
           envsubst "$VARS" < /tmp/compliance-check.md > "$TMP_DIR/assembled_prompt.txt"
 
       # Execute the AI compliance check
@@ -493,7 +496,7 @@ jobs:
           PR_AUTHOR: ${{ steps.pr_info.outputs.pr_author }}
         run: |
           sleep 3  # Wait for comment to be posted
-          
+
           # Find the compliance comment just posted by the bot
           latest_comment=$(gh api "/repos/${{ github.repository }}/issues/${{ env.PR_NUMBER }}/comments" \
             --paginate | jq -r --argjson bots "$BOT_NAMES_JSON" '
@@ -502,10 +505,10 @@ jobs:
               | last
               | {id: .id, body: .body}
             ')
-          
+
           comment_id=$(echo "$latest_comment" | jq -r .id)
           current_body=$(echo "$latest_comment" | jq -r .body)
-          
+
           # Build reviewer mentions (excluding author since already in template)
           reviewer_mentions=""
           if [ -n "$REVIEWER_MENTIONS" ]; then
@@ -515,7 +518,7 @@ jobs:
               fi
             done
           fi
-          
+
           # Prepend reviewer mentions if any exist
           if [ -n "$reviewer_mentions" ]; then
             new_body="$reviewer_mentions
@@ -539,9 +542,9 @@ jobs:
         run: |
           set -e
           sleep 5  # Wait for API consistency
-          
+
           echo "Verifying latest compliance review for required footers..."
-          
+
           # Find latest bot comment with compliance marker
           latest_comment=$(gh api "/repos/${{ github.repository }}/issues/${{ env.PR_NUMBER }}/comments" \
             --paginate | jq -r --argjson bots "$BOT_NAMES_JSON" '
@@ -550,25 +553,25 @@ jobs:
               | last
               | {id: .id, body: .body}
             ')
-          
+
           comment_id=$(echo "$latest_comment" | jq -r .id)
           current_body=$(echo "$latest_comment" | jq -r .body)
-          
+
           EXPECTED_SIGNATURE="_Compliance verification by AI agent"
           EXPECTED_MARKER="<!-- compliance-check-id: ${{ env.PR_NUMBER }}-${{ steps.pr_info.outputs.head_sha }} -->"
-          
+
           needs_fix=false
-          
+
           if [[ "$current_body" != *"$EXPECTED_SIGNATURE"* ]]; then
             echo "::warning::Missing compliance signature footer."
             needs_fix=true
           fi
-          
+
           if [[ "$current_body" != *"compliance-check-id:"* ]]; then
             echo "::warning::Missing compliance-check-id marker."
             needs_fix=true
           fi
-          
+
           if [ "$needs_fix" = true ]; then
             echo "::error::Compliance review missing required footers."
             exit 1
