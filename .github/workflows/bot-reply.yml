@@ -6,7 +6,13 @@ on:
 
 jobs:
   continuous-reply:
-    if: ${{ contains(github.event.comment.body, '@masusenseibot') || contains(github.event.comment.body, '@masusenseibot-agent') }}
+    if: >
+      ${{
+        (contains(github.event.comment.body, '@masusenseibot') || contains(github.event.comment.body, '@masusenseibot-agent'))
+        && github.event.comment.user.login != 'masusenseibot'
+        && github.event.comment.user.login != 'masusenseibot-agent'
+        && github.event.comment.user.login != 'masusenseibot-agent[bot]'
+      }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
