@@ -9,6 +9,7 @@ jobs:
     if: >
       ${{
         (contains(github.event.comment.body, '@masusenseibot') || contains(github.event.comment.body, '@masusenseibot-agent'))
+        && github.event.comment.user.type != 'Bot'
         && github.event.comment.user.login != 'masusenseibot'
         && github.event.comment.user.login != 'masusenseibot-agent'
         && github.event.comment.user.login != 'masusenseibot-agent[bot]'
