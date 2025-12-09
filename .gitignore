@@ -1,2 +1,4 @@
 .github/workflows/opencode.yml
 custom_providers.json
+__pycache__/
+*.pyc
