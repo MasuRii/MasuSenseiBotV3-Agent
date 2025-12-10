@@ -63,6 +63,7 @@ jobs:
     # 1. Manual trigger via workflow_dispatch
     # 2. PR marked ready for review or labeled 'ready-for-merge'
     # 3. Comment contains '/masusenseibot-check' or '/masusenseibot_check'
+    #    AND the comment author is NOT the bot itself (prevents infinite loop)
     # Note: ready_for_review will wait for PR Review to complete (see step below)
     if: |
       github.event_name == 'workflow_dispatch' ||
@@ -71,6 +72,7 @@ jobs:
         (github.event.action == 'labeled' && contains(github.event.label.name, 'ready-for-merge')))) ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request &&
+       github.event.comment.user.login != 'masusenseibot-agent[bot]' &&
        (contains(github.event.comment.body, '/masusenseibot-check') ||
         contains(github.event.comment.body, '/masusenseibot_check')))
     runs-on: ubuntu-latest
