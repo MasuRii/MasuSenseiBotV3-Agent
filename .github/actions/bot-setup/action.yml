@@ -330,9 +330,25 @@ runs:
         source .venv/bin/activate
         uv pip install -r requirements.txt
 
+    - name: Cache opencode CLI
+      id: cache-opencode
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.opencode
+          ~/.local/bin/opencode
+        key: opencode-cli-${{ runner.os }}-v1
+
     - name: Install opencode
+      if: steps.cache-opencode.outputs.cache-hit != 'true'
       shell: bash
       run: curl -fsSL https://opencode.ai/install | bash
+
+    - name: Add opencode to PATH
+      shell: bash
+      run: |
+        echo "$HOME/.opencode/bin" >> $GITHUB_PATH
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
 
     - name: Ensure opencode directory exists
       shell: bash
