@@ -572,6 +572,14 @@ jobs:
           token: ${{ steps.setup.outputs.token }}
           fetch-depth: 0  # Full history needed for git operations and code analysis
 
+      - name: Load Personality
+        id: personality
+        run: |
+          delimiter="PERSONALITY_EOF_$(openssl rand -hex 8)"
+          echo "MASU_SENSEI_PERSONA<<$delimiter" >> $GITHUB_ENV
+          cat .github/personality/masu-sensei-persona.md >> $GITHUB_ENV
+          echo "$delimiter" >> $GITHUB_ENV
+
       - name: Analyze comment and respond
         env:
           GITHUB_TOKEN: ${{ steps.setup.outputs.token }}
@@ -605,7 +613,7 @@ jobs:
               INCREMENTAL_DIFF_PATH=""
               LAST_REVIEWED_SHA=""
             fi
-            VARS='$THREAD_CONTEXT $NEW_COMMENT_AUTHOR $NEW_COMMENT_BODY $THREAD_NUMBER'
+            VARS='$MASU_SENSEI_PERSONA $THREAD_CONTEXT $NEW_COMMENT_AUTHOR $NEW_COMMENT_BODY $THREAD_NUMBER'
             VARS="$VARS"' $GITHUB_REPOSITORY $THREAD_AUTHOR $PR_HEAD_SHA $IS_FIRST_REVIEW'
             VARS="$VARS"' $FULL_DIFF_PATH $INCREMENTAL_DIFF_PATH $LAST_REVIEWED_SHA'
             
