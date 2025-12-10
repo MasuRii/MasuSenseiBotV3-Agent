@@ -194,8 +194,7 @@ jobs:
           title=$(echo "$pr_json" | jq -r .title)
           body=$(echo "$pr_json" | jq -r '.body // "(No description provided)"')
           # Build changed files list with correct jq interpolations for additions and deletions
-          # Previous pattern had a missing backslash before the deletions interpolation, leaving a literal '((.deletions))'.
-          changed_files_list=$(echo "$pr_json" | jq -r '.files[] | "- \(.path) (MODIFIED) +\((.additions))/-\((.deletions))"')
+          changed_files_list=$(echo "$pr_json" | jq -r '.files[] | "- \(.path) (MODIFIED) +\(.additions)/-\(.deletions)"')
           comments=$(echo "$discussion_data" | jq -r --argjson ignored "$IGNORE_BOT_NAMES_JSON" '
             ((.data.repository.pullRequest.comments.nodes // [])
               | map(select((.isMinimized != true) and (((.author.login? // "unknown") as $login | $ignored | index($login)) | not))))

@@ -2,3 +2,5 @@
 custom_providers.json
 __pycache__/
 *.pyc
+.masusenseibot_files/
+*.txt
