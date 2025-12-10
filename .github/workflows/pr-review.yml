@@ -675,7 +675,7 @@ jobs:
               | map(select(.submitted_at > $cutoff))
               | sort_by(.submitted_at)
               | last
-              | {id: .databaseId, body: (.body // "")}
+              | {id: .id, body: (.body // "")}
             ')
 
             if [ -n "$latest_review_json" ] && [ "$latest_review_json" != "null" ]; then
