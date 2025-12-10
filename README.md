@@ -213,7 +213,7 @@ MasuSenseiBot-Agent is a **sophisticated GitHub Actions integration framework** 
    | `BOT_APP_ID` | Your GitHub App ID | `123456` |
    | `BOT_PRIVATE_KEY` | GitHub App private key (full PEM format) | `-----BEGIN RSA PRIVATE KEY-----\n...` |
    | `OPENCODE_API_KEY` | Your LLM provider API key | `sk-...` |
-   | `OPENCODE_MODEL` | Main model identifier | `openai/gpt-4o` or `anthropic/claude-sonnet-4` |
+   | `OPENCODE_MODEL` | Main model identifier (fallback if CUSTOM_PROVIDERS_JSON is set) | `openai/gpt-4o` or `anthropic/claude-sonnet-4` |
    | `OPENCODE_FAST_MODEL` | Fast model for quick tasks | `openai/gpt-4o-mini` |
 
 3. **Enable Workflows**
@@ -502,7 +502,7 @@ To require compliance checks before merge, configure branch protection:
 | `BOT_APP_ID` | GitHub App ID | GitHub App settings page |
 | `BOT_PRIVATE_KEY` | GitHub App private key | Generated when creating GitHub App (PEM format) |
 | `OPENCODE_API_KEY` | LLM provider API key | Your LLM provider (OpenAI, Anthropic, etc.) |
-| `OPENCODE_MODEL` | Main model identifier | e.g., `openai/gpt-4o`, `anthropic/claude-sonnet-4` |
+| `OPENCODE_MODEL` | Main model identifier (fallback if CUSTOM_PROVIDERS_JSON is set) | e.g., `openai/gpt-4o`, `anthropic/claude-sonnet-4` |
 | `OPENCODE_FAST_MODEL` | Fast model for quick responses | e.g., `openai/gpt-4o-mini` |
 
 ### Optional Secrets
@@ -590,6 +590,21 @@ Set your model identifiers:
 OPENCODE_MODEL=my-proxy/llama-3-70b
 OPENCODE_FAST_MODEL=my-proxy/deepseek-r1
 ```
+
+#### Model Priority & Resolution
+
+When using `CUSTOM_PROVIDERS_JSON`, MasuSenseiBot-Agent applies the following priority logic to determine which model to use:
+
+1. **High Priority**: If `CUSTOM_PROVIDERS_JSON` is configured and contains valid providers with models, the bot **automatically selects the first model** from your custom configuration. The `OPENCODE_MODEL` secret is **ignored**.
+2. **Fallback**: If `CUSTOM_PROVIDERS_JSON` is not set, empty, or invalid, the bot falls back to using `OPENCODE_MODEL`.
+
+**Example Scenario:**
+- `CUSTOM_PROVIDERS_JSON` defines `my-proxy/llama-3`
+- `OPENCODE_MODEL` is set to `openai/gpt-4o`
+
+**Result**: The bot uses `my-proxy/llama-3`. `openai/gpt-4o` is ignored.
+
+This means you do not need to keep `OPENCODE_MODEL` in sync with your custom providers configuration.
 
 #### Reasoning Model Support
 
