@@ -25,6 +25,9 @@ outputs:
   token:
     description: "The generated GitHub App token."
     value: ${{ steps.generate_token.outputs.token }}
+  fallback-models:
+    description: "Comma-separated list of models in priority order for fallback rotation"
+    value: ${{ steps.export_fallbacks.outputs.models }}
 
 runs:
   using: "composite"
@@ -160,6 +163,59 @@ runs:
         # jq . ~/.config/opencode/opencode.json
         # echo "----------------------------------------"
         echo "Successfully generated OpenCode configuration."
+
+    - name: Export Fallback Models List
+      id: export_fallbacks
+      shell: bash
+      env:
+        INPUT_MAIN_MODEL: ${{ inputs.opencode-model }}
+        INPUT_CUSTOM_PROVIDERS: ${{ inputs.custom-providers-json }}
+      run: |
+        # Extract provider and model name from the main model string
+        PROVIDER="${INPUT_MAIN_MODEL%%/*}"
+        MODEL_NAME="${INPUT_MAIN_MODEL#*/}"
+        
+        echo "DEBUG: Main model: $INPUT_MAIN_MODEL"
+        echo "DEBUG: Provider: $PROVIDER"
+        echo "DEBUG: Model name: $MODEL_NAME"
+        
+        # If no custom providers configured, just output the main model
+        if [ -z "$INPUT_CUSTOM_PROVIDERS" ] || [ "$INPUT_CUSTOM_PROVIDERS" = "{}" ]; then
+          echo "No custom providers configured. Using only primary model."
+          echo "models=$INPUT_MAIN_MODEL" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Check if the provider exists in custom providers
+        if ! echo "$INPUT_CUSTOM_PROVIDERS" | jq -e --arg provider "$PROVIDER" 'has($provider)' >/dev/null 2>&1; then
+          echo "Provider '$PROVIDER' not found in custom providers. Using only primary model."
+          echo "models=$INPUT_MAIN_MODEL" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Get all models for this provider, sorted by priority (lower = higher priority)
+        # Models without priority field default to 999 (tried last)
+        # Exclude the primary model from fallbacks since it's always first
+        FALLBACKS=$(echo "$INPUT_CUSTOM_PROVIDERS" | jq -r --arg provider "$PROVIDER" --arg primary "$MODEL_NAME" '
+          .[$provider].models // {}
+          | to_entries
+          | map(select(.key != $primary))
+          | sort_by(.value.priority // 999)
+          | map($provider + "/" + .key)
+          | join(",")
+        ')
+        
+        # Primary model first, then fallbacks in priority order
+        if [ -n "$FALLBACKS" ]; then
+          MODELS_LIST="${INPUT_MAIN_MODEL},${FALLBACKS}"
+          echo "Fallback models configured: $FALLBACKS"
+        else
+          MODELS_LIST="$INPUT_MAIN_MODEL"
+          echo "No fallback models available for provider '$PROVIDER'"
+        fi
+        
+        echo "models=$MODELS_LIST" >> $GITHUB_OUTPUT
+        echo "Model rotation order: $MODELS_LIST"
 
     - name: Check for Python requirements file
       id: check_requirements_file

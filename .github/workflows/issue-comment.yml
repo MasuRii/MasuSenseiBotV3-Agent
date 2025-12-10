@@ -169,7 +169,10 @@ jobs:
               },
               "webfetch": "deny"
             }
+          FALLBACK_MODELS: ${{ steps.setup.outputs.fallback-models }}
         run: |
             # Only substitute the variables we intend; leave example $vars and secrets intact
             VARS='${ISSUE_CONTEXT} ${ISSUE_NUMBER} ${ISSUE_AUTHOR}'
-            envsubst "$VARS" < /tmp/issue-comment.md | opencode run --share -
+            # Make wrapper script executable and use it for model rotation/fallback
+            chmod +x ./.github/scripts/run-with-fallback.sh
+            envsubst "$VARS" < /tmp/issue-comment.md | ./.github/scripts/run-with-fallback.sh run --share -

@@ -628,9 +628,12 @@ jobs:
           PR_NUMBER: ${{ env.PR_NUMBER }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_HEAD_SHA: ${{ env.PR_HEAD_SHA }}
+          FALLBACK_MODELS: ${{ steps.setup.outputs.fallback-models }}
         run: |
           TMP_DIR="${RUNNER_TEMP:-/tmp}"
-          opencode run --share - < "$TMP_DIR/assembled_prompt.txt"
+          # Make wrapper script executable and use it for model rotation/fallback
+          chmod +x ./.github/scripts/run-with-fallback.sh
+          ./.github/scripts/run-with-fallback.sh run --share - < "$TMP_DIR/assembled_prompt.txt"
 
       - name: Verify AI Review Footers
         if: always()

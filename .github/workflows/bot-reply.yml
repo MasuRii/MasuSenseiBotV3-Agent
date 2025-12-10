@@ -583,6 +583,7 @@ jobs:
           THREAD_AUTHOR: ${{ env.THREAD_AUTHOR }}
           PR_HEAD_SHA: ${{ env.PR_HEAD_SHA }}
           IS_FIRST_REVIEW: ${{ steps.review_type.outputs.is_first_review }}
+          FALLBACK_MODELS: ${{ steps.setup.outputs.fallback-models }}
           OPENCODE_PERMISSION: |
             {
               "bash": {
@@ -607,4 +608,7 @@ jobs:
             VARS='$THREAD_CONTEXT $NEW_COMMENT_AUTHOR $NEW_COMMENT_BODY $THREAD_NUMBER'
             VARS="$VARS"' $GITHUB_REPOSITORY $THREAD_AUTHOR $PR_HEAD_SHA $IS_FIRST_REVIEW'
             VARS="$VARS"' $FULL_DIFF_PATH $INCREMENTAL_DIFF_PATH $LAST_REVIEWED_SHA'
-            FULL_DIFF_PATH="$FULL_DIFF_PATH" INCREMENTAL_DIFF_PATH="$INCREMENTAL_DIFF_PATH" LAST_REVIEWED_SHA="$LAST_REVIEWED_SHA" envsubst "$VARS" < /tmp/bot-reply.md | opencode run --share -
+            
+            # Make wrapper script executable and use it for model rotation/fallback
+            chmod +x ./.github/scripts/run-with-fallback.sh
+            FULL_DIFF_PATH="$FULL_DIFF_PATH" INCREMENTAL_DIFF_PATH="$INCREMENTAL_DIFF_PATH" LAST_REVIEWED_SHA="$LAST_REVIEWED_SHA" envsubst "$VARS" < /tmp/bot-reply.md | ./.github/scripts/run-with-fallback.sh run --share -
