@@ -136,6 +136,10 @@ main() {
     local successful_model=""
     
     for model in "${MODELS[@]}"; do
+        # Trim leading/trailing whitespace
+        model=$(echo "$model" | xargs)
+        [ -z "$model" ] && continue
+
         attempt=$((attempt + 1))
         log_info "Attempt $attempt/$total_models: Trying model '$model'"
         

@@ -174,8 +174,7 @@ jobs:
             body=$(echo "$pr_json" | jq -r '.body // "(No description provided)"')
             # Prepare changed files list
             # Build changed files list with correct jq interpolations for additions and deletions
-            # Previous pattern had a missing backslash before the deletions interpolation, leaving a literal '((.deletions))'.
-            changed_files_list=$(echo "$pr_json" | jq -r '.files[] | "- \(.path) (MODIFIED) +\((.additions))/-\((.deletions))"')
+            changed_files_list=$(echo "$pr_json" | jq -r '.files[] | "- \(.path) (MODIFIED) +\(.additions)/-\(.deletions)"')
             # Prepare general PR comments (exclude ignored bots)
             comments=$(echo "$discussion_data" | jq -r --argjson ignored "$IGNORE_BOT_NAMES_JSON" '
               ((.data.repository.pullRequest.comments.nodes // [])
@@ -572,6 +571,14 @@ jobs:
           token: ${{ steps.setup.outputs.token }}
           fetch-depth: 0  # Full history needed for git operations and code analysis
 
+      - name: Load Personality
+        id: personality
+        run: |
+          delimiter="PERSONALITY_EOF_$(openssl rand -hex 8)"
+          echo "MASU_SENSEI_PERSONA<<$delimiter" >> $GITHUB_ENV
+          cat .github/personality/masu-sensei-persona.md >> $GITHUB_ENV
+          echo "$delimiter" >> $GITHUB_ENV
+
       - name: Analyze comment and respond
         env:
           GITHUB_TOKEN: ${{ steps.setup.outputs.token }}
@@ -605,9 +612,9 @@ jobs:
               INCREMENTAL_DIFF_PATH=""
               LAST_REVIEWED_SHA=""
             fi
-            VARS='$THREAD_CONTEXT $NEW_COMMENT_AUTHOR $NEW_COMMENT_BODY $THREAD_NUMBER'
-            VARS="$VARS"' $GITHUB_REPOSITORY $THREAD_AUTHOR $PR_HEAD_SHA $IS_FIRST_REVIEW'
-            VARS="$VARS"' $FULL_DIFF_PATH $INCREMENTAL_DIFF_PATH $LAST_REVIEWED_SHA'
+            VARS='${MASU_SENSEI_PERSONA} ${THREAD_CONTEXT} ${NEW_COMMENT_AUTHOR} ${NEW_COMMENT_BODY} ${THREAD_NUMBER}'
+            VARS="$VARS"' ${GITHUB_REPOSITORY} ${THREAD_AUTHOR} ${PR_HEAD_SHA} ${IS_FIRST_REVIEW}'
+            VARS="$VARS"' ${FULL_DIFF_PATH} ${INCREMENTAL_DIFF_PATH} ${LAST_REVIEWED_SHA}'
             
             # Make wrapper script executable and use it for model rotation/fallback
             chmod +x ./.github/scripts/run-with-fallback.sh

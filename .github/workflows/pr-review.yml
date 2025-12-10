@@ -194,8 +194,7 @@ jobs:
           title=$(echo "$pr_json" | jq -r .title)
           body=$(echo "$pr_json" | jq -r '.body // "(No description provided)"')
           # Build changed files list with correct jq interpolations for additions and deletions
-          # Previous pattern had a missing backslash before the deletions interpolation, leaving a literal '((.deletions))'.
-          changed_files_list=$(echo "$pr_json" | jq -r '.files[] | "- \(.path) (MODIFIED) +\((.additions))/-\((.deletions))"')
+          changed_files_list=$(echo "$pr_json" | jq -r '.files[] | "- \(.path) (MODIFIED) +\(.additions)/-\(.deletions)"')
           comments=$(echo "$discussion_data" | jq -r --argjson ignored "$IGNORE_BOT_NAMES_JSON" '
             ((.data.repository.pullRequest.comments.nodes // [])
               | map(select((.isMinimized != true) and (((.author.login? // "unknown") as $login | $ignored | index($login)) | not))))
@@ -581,6 +580,14 @@ jobs:
           [ -f "$GITHUB_WORKSPACE/.masusenseibot_files/incremental_diff.txt" ] || touch "$GITHUB_WORKSPACE/.masusenseibot_files/incremental_diff.txt"
 
 
+      - name: Load Personality
+        id: personality
+        run: |
+          delimiter="PERSONALITY_EOF_$(openssl rand -hex 8)"
+          echo "MASU_SENSEI_PERSONA<<$delimiter" >> $GITHUB_ENV
+          cat .github/personality/masu-sensei-persona.md >> $GITHUB_ENV
+          echo "$delimiter" >> $GITHUB_ENV
+
       - name: Assemble Review Prompt
         env:
           REVIEW_TYPE: ${{ steps.review_type.outputs.is_first_review == 'true' && 'FIRST' || 'FOLLOW-UP' }}
@@ -599,7 +606,7 @@ jobs:
           fi
           # Substitute variables, embedding PR context and diff file path; DIFF_FILE_PATH kept local to this process
           TMP_DIR="${RUNNER_TEMP:-/tmp}"
-          VARS='${REVIEW_TYPE} ${PR_AUTHOR} ${IS_FIRST_REVIEW} ${PR_NUMBER} ${GITHUB_REPOSITORY} ${PR_HEAD_SHA} ${PULL_REQUEST_CONTEXT} ${DIFF_FILE_PATH}'
+          VARS='${MASU_SENSEI_PERSONA} ${REVIEW_TYPE} ${PR_AUTHOR} ${IS_FIRST_REVIEW} ${PR_NUMBER} ${GITHUB_REPOSITORY} ${PR_HEAD_SHA} ${PULL_REQUEST_CONTEXT} ${DIFF_FILE_PATH}'
           DIFF_FILE_PATH="$DIFF_FILE_PATH" envsubst "$VARS" < /tmp/pr-review.md > "$TMP_DIR/assembled_prompt.txt"
           # Immediately clear large env after use
           echo "PULL_REQUEST_CONTEXT=" >> "$GITHUB_ENV"
